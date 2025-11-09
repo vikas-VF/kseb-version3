@@ -1,0 +1,66 @@
+# Dash Framework
+dash
+dash-bootstrap-components
+plotly
+
+# Backend/API Framework
+fastapi
+uvicorn
+pydantic
+
+# Data Processing
+numpy
+pandas
+scikit-learn
+statsmodels
+scipy
+
+# PyPSA and Energy Modeling
+pypsa
+
+
+# Visualization
+matplotlib
+seaborn
+
+# Excel File Handling
+openpyxl
+xlsxwriter
+
+# Utilities
+python-dateutil
+holidays
+pytz
+requests
+
+# File System
+pathlib
+
+# Additional Dependencies
+python-multipart
+aiofiles
+
+# ============================================================================
+# PERFORMANCE OPTIMIZATION PACKAGES
+# ============================================================================
+
+# Caching (5-100x speedup for repeated operations)
+flask-caching>=2.1.0
+
+# Compression (90% smaller network caches, 100x faster loading)
+lz4>=4.3.2
+
+# Production Server (5-10x more concurrent users)
+gunicorn>=21.2.0
+gevent>=23.9.1
+waitress>=2.1.2  # For Windows
+
+# Background Task Processing (for long-running operations)
+# celery>=5.3.4  # Uncomment if using background tasks
+# redis>=5.0.1   # Required for Celery
+
+# Advanced Data Tables (pagination, virtual scrolling)
+# dash-ag-grid>=2.4.0  # Uncomment for large tables
+
+# Performance Monitoring
+# flask-profiler>=1.8.1  # Uncomment for profiling
