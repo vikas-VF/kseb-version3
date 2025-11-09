@@ -1,9 +1,10 @@
 """
-Demand Visualization Page - PHASE 1 & 2: Layout + Sector Data View
+Demand Visualization Page - PARTS 1, 2 & 3 COMPLETE
 Full feature parity with React DemandVisualization.jsx
 
 Part 1: Layout, state management, scenario loading, tab navigation
 Part 2: Sector data view with line charts, models, forecast markers
+Part 3: T&D Losses tab with area chart and save functionality
 """
 
 from dash import html, dcc, callback, Input, Output, State, ALL, MATCH, callback_context, no_update
@@ -279,13 +280,10 @@ def render_tab_content(active_tab, state, sectors):
     if active_tab == 'sector':
         return render_sector_data_view(state, sectors)
     elif active_tab == 'td_losses':
-        return html.Div([
-            html.H5('T&D Losses - Coming in Part 3', className='text-muted'),
-            dbc.Alert('Transmission & Distribution losses configuration and visualization.', color='info')
-        ])
+        return render_td_losses_view(state, sectors)
     elif active_tab == 'consolidated':
         return html.Div([
-            html.H5('Consolidated Results - Coming in Part 3', className='text-muted'),
+            html.H5('Consolidated Results - Coming in Part 4', className='text-muted'),
             dbc.Alert('Consolidated demand results with area charts, stacked bar charts, and model selection.', color='info')
         ])
 
@@ -333,6 +331,62 @@ def render_sector_data_view(state, sectors):
 
         # Data Table
         html.Div(id='viz-sector-data-table', className='mt-3')
+    ], fluid=True)
+
+
+def render_td_losses_view(state, sectors):
+    """Render T&D Losses tab content with controls and chart"""
+
+    if not sectors:
+        return dbc.Alert('No sectors available for this scenario.', color='info')
+
+    selected_sector = state.get('selectedSector') or (sectors[0] if sectors else None)
+
+    return dbc.Container([
+        # Info Alert
+        dbc.Alert([
+            html.H6('Transmission & Distribution Losses', className='alert-heading mb-2'),
+            html.P('Configure T&D loss percentages for each sector. These losses represent energy lost during electricity transmission and distribution.', className='mb-0', style={'fontSize': '0.875rem'})
+        ], color='info', className='mb-3'),
+
+        # Controls Row
+        dbc.Row([
+            dbc.Col([
+                dbc.Label('Sector:', className='fw-bold mb-1'),
+                dcc.Dropdown(
+                    id='viz-td-sector-selector',
+                    options=[{'label': s, 'value': s} for s in sectors],
+                    value=selected_sector,
+                    clearable=False
+                )
+            ], width=6),
+            dbc.Col([
+                dbc.Label('T&D Loss (%):', className='fw-bold mb-1'),
+                dbc.Input(
+                    id='viz-td-loss-input',
+                    type='number',
+                    min=0,
+                    max=100,
+                    step=0.1,
+                    placeholder='Enter loss percentage'
+                )
+            ], width=3),
+            dbc.Col([
+                dbc.Label(html.Span('\u00A0'), className='mb-1'),
+                dbc.Button(
+                    [html.I(className='bi bi-save me-2'), 'Save'],
+                    id='viz-save-td-losses-btn',
+                    color='success',
+                    className='w-100'
+                )
+            ], width=3)
+        ], className='mb-3'),
+
+        # Chart
+        html.Div(id='viz-td-losses-chart'),
+
+        # Save status
+        html.Div(id='viz-td-save-status')
     ], fluid=True)
 
 
@@ -598,9 +652,153 @@ def render_sector_data_table(data, unit, sector):
         return dbc.Alert(f'Error rendering table: {str(e)}', color='danger')
 
 
-# THIS IS PART 1 & 2 - Foundation + Sector Data View complete!
+# ==================================================
+# PART 3: T&D LOSSES TAB
+# ==================================================
+
+# Load T&D losses data for scenario
+@callback(
+    Output('viz-td-losses', 'data'),
+    Input('viz-scenario-selector', 'value'),
+    State('active-project-store', 'data'),
+    prevent_initial_call=True
+)
+def load_td_losses(scenario, active_project):
+    """Load T&D losses configuration from backend"""
+    if not scenario or not active_project:
+        return {}
+
+    try:
+        response = api.get_td_losses(active_project['path'], scenario)
+        return response.get('losses', {})
+    except Exception as e:
+        print(f"Error loading T&D losses: {e}")
+        return {}
+
+
+# Update T&D loss input when sector changes
+@callback(
+    Output('viz-td-loss-input', 'value'),
+    Input('viz-td-sector-selector', 'value'),
+    State('viz-td-losses', 'data'),
+    prevent_initial_call=True
+)
+def update_td_loss_input(sector, td_losses):
+    """Update input field with sector's T&D loss value"""
+    if not sector:
+        return None
+
+    return td_losses.get(sector, 5.0)  # Default 5%
+
+
+# Render T&D losses chart
+@callback(
+    Output('viz-td-losses-chart', 'children'),
+    Input('viz-td-losses', 'data'),
+    State('viz-scenario-selector', 'value'),
+    State('viz-start-year', 'value'),
+    State('viz-end-year', 'value'),
+    State('active-project-store', 'data')
+)
+def render_td_losses_chart(td_losses, scenario, start_year, end_year, active_project):
+    """Render T&D losses area chart"""
+    if not td_losses or not scenario or not active_project:
+        return dbc.Alert('No T&D losses data available.', color='info')
+
+    if not start_year or not end_year:
+        return dbc.Alert('Please set year range.', color='info')
+
+    try:
+        # Create years range
+        years = list(range(start_year, end_year + 1))
+
+        # Create figure with all sectors
+        fig = go.Figure()
+
+        # Add trace for each sector
+        for sector, loss_pct in td_losses.items():
+            # Constant loss percentage over time
+            loss_values = [loss_pct] * len(years)
+
+            fig.add_trace(go.Scatter(
+                x=years,
+                y=loss_values,
+                name=sector,
+                mode='lines',
+                fill='tonexty' if len(fig.data) > 0 else 'tozeroy',
+                line=dict(width=2),
+                hovertemplate=f'{sector}<br>Year: %{{x}}<br>Loss: %{{y:.2f}}%<extra></extra>'
+            ))
+
+        # Update layout
+        fig.update_layout(
+            title='T&D Losses by Sector (%)',
+            xaxis_title='Year',
+            yaxis_title='T&D Loss (%)',
+            hovermode='x unified',
+            legend=dict(orientation='h', y=-0.2),
+            height=400,
+            template='plotly_white',
+            yaxis=dict(range=[0, max(td_losses.values(), default=10) * 1.2])
+        )
+
+        return dcc.Graph(figure=fig, config={'displayModeBar': True})
+
+    except Exception as e:
+        return dbc.Alert(f'Error rendering chart: {str(e)}', color='danger')
+
+
+# Save T&D losses
+@callback(
+    Output('viz-td-save-status', 'children'),
+    Output('viz-td-losses', 'data', allow_duplicate=True),
+    Input('viz-save-td-losses-btn', 'n_clicks'),
+    State('viz-td-sector-selector', 'value'),
+    State('viz-td-loss-input', 'value'),
+    State('viz-scenario-selector', 'value'),
+    State('viz-td-losses', 'data'),
+    State('active-project-store', 'data'),
+    prevent_initial_call=True
+)
+def save_td_losses(n_clicks, sector, loss_value, scenario, current_losses, active_project):
+    """Save T&D loss value for sector"""
+    if not n_clicks or not sector or loss_value is None:
+        return no_update, no_update
+
+    if not scenario or not active_project:
+        return dbc.Alert('Project or scenario not selected.', color='warning'), no_update
+
+    try:
+        # Update losses dict
+        updated_losses = {**current_losses, sector: loss_value}
+
+        # Save to backend
+        response = api.save_td_losses(
+            active_project['path'],
+            scenario,
+            updated_losses
+        )
+
+        if response.get('success'):
+            toast = dbc.Toast(
+                [html.P(f'T&D loss for {sector} saved: {loss_value}%', className='mb-0')],
+                header='Saved Successfully',
+                icon='success',
+                duration=3000,
+                is_open=True,
+                style={'position': 'fixed', 'top': 20, 'right': 20, 'zIndex': 9999}
+            )
+            return toast, updated_losses
+        else:
+            return dbc.Alert('Failed to save T&D losses.', color='danger'), no_update
+
+    except Exception as e:
+        print(f"Error saving T&D losses: {e}")
+        return dbc.Alert(f'Error: {str(e)}', color='danger'), no_update
+
+
+# THIS IS PART 1, 2 & 3 - Foundation + Sector Data + T&D Losses complete!
 # Next parts will add:
-# - T&D losses tab (Part 3)
 # - Consolidated results with area/bar charts (Part 4)
 # - Model selection modal (Part 5)
 # - Comparison mode (Part 6)
