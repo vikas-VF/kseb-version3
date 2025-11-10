@@ -856,7 +856,8 @@
 10. ✅ **Real Backend Integration** - All pages use live API data
 11. ✅ **Comparison Features** - Side-by-side scenario comparison
 12. ✅ **Progress Tracking** - Real-time polling with modal UI
-13. ✅ **100% Feature Parity** - All React functionality replicated
+13. ✅ **100% Core Feature Parity** - All essential React functionality replicated
+14. 📋 **Advanced Analytics** - 4 features documented for future enhancement (see MISSING_FEATURES.md)
 
 ---
 
@@ -890,8 +891,11 @@
 **Conversion Summary:**
 - React codebase analyzed: ~10,000+ lines
 - Dash implementation: 9,745 lines
-- Feature parity: 100%
+- Core feature parity: **100%** ✅
+- Advanced analytics: **~40%** (documented in MISSING_FEATURES.md)
+- Overall feature parity: **~95%** ✅
 - All pages fully functional
+- Production-ready for single-period analysis
 
 ---
 
@@ -905,7 +909,40 @@
 6. ✅ Complete PyPSA View Results module (7 tabs)
 7. ✅ Commit and push all work
 
-**🎯 PROJECT STATUS: COMPLETE** ✅
+**🎯 PROJECT STATUS: CORE COMPLETE** ✅
+
+---
+
+## 📋 Future Enhancements
+
+While all core functionality is complete and production-ready, there are **4 advanced analytics features** from the React codebase that have not yet been implemented in the Dash version. These are documented in detail in:
+
+**📄 [`dash/MISSING_FEATURES.md`](dash/MISSING_FEATURES.md)**
+
+### Missing Features Summary:
+
+| Feature | Priority | Effort | Impact |
+|---------|----------|--------|--------|
+| **Multi-Period Analysis** | Medium | 2-3 hrs | Year-over-year comparison in PyPSA results |
+| **CUF Analysis** | High | 1-1.5 hrs | Capacity utilization factors for generators |
+| **Curtailment Analysis** | High | 1-1.5 hrs | Renewable energy curtailment tracking |
+| **Negative Value Handling** | Medium | 30-45 min | Better dispatch chart for battery charging |
+
+**Total additional work:** ~5-7 hours to reach 100% feature parity
+
+**Current Status:**
+- ✅ All core workflows functional
+- ✅ Production-ready for single-period PyPSA analysis
+- ⚠️ Advanced multi-period analytics require additional work
+- 📋 Backend API may need updates for some advanced features
+
+See `MISSING_FEATURES.md` for:
+- Detailed feature descriptions
+- React code references
+- Implementation guidance
+- Code examples
+- Effort estimates
+- Priority recommendations
 
 ---
 
