@@ -29,6 +29,8 @@ This is a complete conversion of the KSEB Energy Analytics Platform from **React
   ProjectName/
   ├── inputs/               # Excel templates
   │   └── input_demand_file.xlsx
+  │   └── load_curve_template.xlsx
+  │   └── pypsa_input_template.xlsx
   └── results/
       ├── demand_forecasts/     # Forecast scenarios
       ├── load_profiles/        # Generated profiles
