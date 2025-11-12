@@ -14,7 +14,7 @@ from datetime import datetime
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from services.api_client import api
+from services.local_service import service as api
 from utils.state_manager import StateManager, format_date
 
 
