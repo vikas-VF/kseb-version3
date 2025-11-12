@@ -402,8 +402,26 @@ def create_project(n_clicks, name, location, description, recent_projects):
         os.makedirs(os.path.join(project_path, 'results', 'load_profiles'), exist_ok=True)
         os.makedirs(os.path.join(project_path, 'results', 'pypsa_optimization'), exist_ok=True)
 
-        # Copy template files (if they exist in backend)
-        # TODO: Copy input_demand_file.xlsx, load_curve_template.xlsx, pypsa_input_template.xlsx
+        # Copy template files from backend to project inputs folder
+        import shutil
+        backend_templates_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', 'backend_fastapi', 'input')
+        template_files = [
+            'input_demand_file.xlsx',
+            'load_curve_template.xlsx',
+            'pypsa_input_template.xlsx'
+        ]
+
+        for template_file in template_files:
+            src_path = os.path.join(backend_templates_path, template_file)
+            dest_path = os.path.join(project_path, 'inputs', template_file)
+
+            if os.path.exists(src_path):
+                try:
+                    shutil.copy2(src_path, dest_path)
+                except Exception as copy_err:
+                    print(f"Warning: Could not copy {template_file}: {copy_err}")
+            else:
+                print(f"Warning: Template file not found: {src_path}")
 
         # Create project.json metadata
         metadata = {
@@ -480,6 +498,18 @@ def create_project(n_clicks, name, location, description, recent_projects):
                     html.Span('  ├─ 📁 ', style={'marginRight': '0.5rem', 'fontFamily': 'monospace'}),
                     html.Code('inputs/')
                 ], className='ms-3'),
+                html.Div([
+                    html.Span('  │  ├─ 📄 ', style={'marginRight': '0.5rem', 'fontFamily': 'monospace'}),
+                    html.Code('input_demand_file.xlsx')
+                ], className='ms-5'),
+                html.Div([
+                    html.Span('  │  ├─ 📄 ', style={'marginRight': '0.5rem', 'fontFamily': 'monospace'}),
+                    html.Code('load_curve_template.xlsx')
+                ], className='ms-5'),
+                html.Div([
+                    html.Span('  │  └─ 📄 ', style={'marginRight': '0.5rem', 'fontFamily': 'monospace'}),
+                    html.Code('pypsa_input_template.xlsx')
+                ], className='ms-5'),
                 html.Div([
                     html.Span('  ├─ 📁 ', style={'marginRight': '0.5rem', 'fontFamily': 'monospace'}),
                     html.Code('results/')
