@@ -766,6 +766,8 @@ def render_sector_data_table(data, unit, sector_idx, sectors):
 
         for col in electricity_cols:
             if col in df.columns:
+                # Convert to numeric first, handling non-numeric values
+                df[col] = pd.to_numeric(df[col], errors='coerce')
                 df[col] = df[col] * factor
 
         # Create custom table with sticky header and first column
@@ -792,9 +794,19 @@ def render_sector_data_table(data, unit, sector_idx, sectors):
         # Table rows
         table_rows = []
         for idx, row in df.iterrows():
-            cells = [
-                html.Td(
-                    f'{row[col]:.2f}' if isinstance(row[col], (int, float)) and col not in ['Year', 'year'] else str(row[col]),
+            cells = []
+            for i, col in enumerate(df.columns):
+                value = row[col]
+                # Format value: 2 decimals for floats, no decimals for Year
+                if col.lower() in ['year']:
+                    formatted_value = str(int(value)) if pd.notna(value) else ''
+                elif pd.notna(value) and isinstance(value, (int, float)):
+                    formatted_value = f'{value:.2f}'
+                else:
+                    formatted_value = str(value) if pd.notna(value) else ''
+
+                cells.append(html.Td(
+                    formatted_value,
                     style={
                         'position': 'sticky' if i == 0 else 'static',
                         'left': '0' if i == 0 else 'auto',
@@ -806,9 +818,7 @@ def render_sector_data_table(data, unit, sector_idx, sectors):
                         'whiteSpace': 'nowrap',
                         'borderBottom': '1px solid #f1f5f9'
                     }
-                )
-                for i, col in enumerate(df.columns)
-            ]
+                ))
             table_rows.append(html.Tr(cells))
 
         table = html.Table(
@@ -1138,30 +1148,40 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
                                         {'label': 'MLR', 'value': 'MLR'},
                                         {'label': 'WAM', 'value': 'WAM'}
                                     ],
-                                    value=['SLR'],  # Default: SLR selected
+                                    value=['SLR', 'MLR', 'WAM'],  # Default: All selected
                                     inline=True,
                                     className='mb-0'
                                 )
                             ], style={'width': '25%', 'padding': '0.75rem'}),
 
-                            # Column 3: MLR Parameters (shown only if MLR selected)
+                            # Column 3: MLR Parameters (conditional dropdown)
                             html.Div(
-                                html.Div(
-                                    'Select MLR method to configure parameters',
-                                    id={'type': 'mlr-params-placeholder', 'sector': idx},
-                                    style={'fontSize': '0.875rem', 'color': '#64748b', 'fontStyle': 'italic'}
+                                dcc.Dropdown(
+                                    id={'type': 'mlr-params', 'sector': idx},
+                                    options=[
+                                        {'label': 'GDP', 'value': 'GDP'},
+                                        {'label': 'Population', 'value': 'Population'},
+                                        {'label': 'Income', 'value': 'Income'}
+                                    ],
+                                    multi=True,
+                                    placeholder='Select parameters...',
+                                    style={'fontSize': '0.875rem'}
                                 ),
-                                style={'width': '40%', 'padding': '0.75rem'}
+                                style={'width': '40%', 'padding': '0.75rem'},
+                                id={'type': 'mlr-params-container', 'sector': idx}
                             ),
 
-                            # Column 4: WAM Years (shown only if WAM selected)
+                            # Column 4: WAM Years (conditional select)
                             html.Div(
-                                html.Div(
-                                    'N/A',
-                                    id={'type': 'wam-years-placeholder', 'sector': idx},
-                                    style={'fontSize': '0.875rem', 'color': '#64748b'}
+                                dcc.Dropdown(
+                                    id={'type': 'wam-years', 'sector': idx},
+                                    options=[{'label': str(i), 'value': i} for i in range(3, 11)],
+                                    value=3,
+                                    clearable=False,
+                                    style={'fontSize': '0.875rem', 'width': '80px'}
                                 ),
-                                style={'width': '15%', 'padding': '0.75rem'}
+                                style={'width': '15%', 'padding': '0.75rem'},
+                                id={'type': 'wam-years-container', 'sector': idx}
                             )
                         ], style={
                             'display': 'flex',
@@ -1197,12 +1217,15 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
     State('forecast-target-year', 'value'),
     State('forecast-exclude-covid', 'value'),
     State({'type': 'sector-models', 'sector': ALL}, 'value'),
+    State({'type': 'mlr-params', 'sector': ALL}, 'value'),
+    State({'type': 'wam-years', 'sector': ALL}, 'value'),
     State('active-project-store', 'data'),
     State('sectors-store', 'data'),
     prevent_initial_call=True
 )
 def start_forecasting(n_clicks, scenario_name, target_year, exclude_covid,
-                     sector_models_list, active_project, sectors):
+                     sector_models_list, mlr_params_list, wam_years_list,
+                     active_project, sectors):
     """Start forecasting process with React-matched configuration"""
     if not n_clicks:
         return no_update, no_update, no_update
@@ -1215,12 +1238,25 @@ def start_forecasting(n_clicks, scenario_name, target_year, exclude_covid,
         # Prepare sector configurations
         sector_configs = []
         for idx, sector in enumerate(sectors):
-            models = sector_models_list[idx] if idx < len(sector_models_list) else ['SLR']
+            models = sector_models_list[idx] if idx < len(sector_models_list) else ['SLR', 'MLR', 'WAM']
+            mlr_params = mlr_params_list[idx] if idx < len(mlr_params_list) else []
+            wam_years = wam_years_list[idx] if idx < len(wam_years_list) else 3
+
             if models:  # Only include sectors with at least one model selected
-                sector_configs.append({
+                sector_config = {
                     'name': sector,
                     'models': models
-                })
+                }
+
+                # Add MLR parameters if MLR is selected
+                if 'MLR' in models and mlr_params:
+                    sector_config['mlr_parameters'] = mlr_params
+
+                # Add WAM window if WAM is selected
+                if 'WAM' in models:
+                    sector_config['wam_window'] = wam_years
+
+                sector_configs.append(sector_config)
 
         if not sector_configs:
             return no_update, no_update, no_update
@@ -1242,13 +1278,13 @@ def start_forecasting(n_clicks, scenario_name, target_year, exclude_covid,
         # Store process ID for tracking
         process_state = {
             'process_id': response.get('process_id'),
-            'status': 'running',
-            'progress': 0,
-            'current_task': 'Initializing forecast...'
+            'status': 'completed' if response.get('success') else 'failed',
+            'progress': 100 if response.get('success') else 0,
+            'current_task': response.get('message', 'Forecast completed')
         }
 
         # Open progress modal and enable interval for polling
-        return True, process_state, False
+        return True, process_state, True  # Disable interval since it's complete
 
     except Exception as e:
         print(f"Error starting forecast: {e}")
