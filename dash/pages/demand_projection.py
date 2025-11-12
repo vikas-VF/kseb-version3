@@ -242,6 +242,10 @@ def layout(active_project=None):
         dcc.Store(id='color-config-store', data={}),
         dcc.Store(id='forecast-process-state', data=None),
 
+        # NEW: Stores for enhanced forecast configuration (React parity)
+        dcc.Store(id='existing-scenarios-store', data=[]),  # List of existing scenario names
+        dcc.Store(id='sector-metadata-store', data={}),  # Row counts, correlation data per sector
+
         # Interval for SSE polling (alternative to EventSource)
         dcc.Interval(id='forecast-progress-interval', interval=1000, disabled=True),
 
@@ -1037,6 +1041,93 @@ def initialize_sector_selector(options, current_value):
 # CALLBACKS - CONFIGURE FORECAST MODAL
 # ============================================================================
 
+# NEW: Fetch scenarios and sector metadata when opening configure modal
+@callback(
+    Output('existing-scenarios-store', 'data'),
+    Output('sector-metadata-store', 'data'),
+    Input('open-configure-forecast-btn', 'n_clicks'),
+    State('active-project-store', 'data'),
+    State('sectors-store', 'data'),
+    prevent_initial_call=True
+)
+def fetch_configure_modal_data(n_clicks, active_project, sectors):
+    """
+    Fetch existing scenarios and sector metadata (correlation, row counts)
+    This matches React's useEffect behavior when modal opens
+    """
+    if not n_clicks or not active_project or not sectors:
+        return no_update, no_update
+
+    try:
+        # Fetch existing scenarios for duplicate check
+        scenarios_response = api.get_scenarios(active_project['path'])
+        existing_scenarios = scenarios_response.get('scenarios', [])
+
+        # Fetch metadata for each sector (correlation data and row counts)
+        sector_metadata = {}
+        for sector in sectors:
+            try:
+                # Extract sector data to get row count
+                data_response = api.extract_sector_data(active_project['path'], sector)
+                if data_response.get('success'):
+                    rows = data_response.get('data', [])
+                    row_count = len(rows)
+
+                    # Get correlation analysis for MLR parameters
+                    corr_response = api.get_sector_correlation(active_project['path'], sector)
+                    correlations = []
+                    mlr_params = []
+
+                    if corr_response.get('success'):
+                        # Extract correlation with electricity (excluding Year, Electricity itself)
+                        corr_matrix = corr_response.get('correlation_matrix', {})
+                        electricity_corr = corr_matrix.get('Electricity', {})
+
+                        # Create list of parameters sorted by correlation strength
+                        for param, corr_value in electricity_corr.items():
+                            if param.lower() not in ['year', 'electricity']:
+                                correlations.append({
+                                    'variable': param,
+                                    'correlation': abs(corr_value)  # Use absolute value
+                                })
+
+                        # Sort by correlation strength (highest first)
+                        correlations.sort(key=lambda x: x['correlation'], reverse=True)
+                        mlr_params = [c['variable'] for c in correlations]
+
+                    sector_metadata[sector] = {
+                        'row_count': row_count,
+                        'correlations': correlations,
+                        'mlr_params': mlr_params,  # Available MLR parameters
+                        'max_wam_window': max(3, row_count - 2)  # React formula: rowCount - 2
+                    }
+                else:
+                    # Default values if data extraction fails
+                    sector_metadata[sector] = {
+                        'row_count': 10,
+                        'correlations': [],
+                        'mlr_params': ['GDP', 'Population', 'Income'],  # Fallback
+                        'max_wam_window': 8
+                    }
+
+            except Exception as e:
+                print(f"Error fetching metadata for sector {sector}: {e}")
+                sector_metadata[sector] = {
+                    'row_count': 10,
+                    'correlations': [],
+                    'mlr_params': ['GDP', 'Population', 'Income'],
+                    'max_wam_window': 8
+                }
+
+        return existing_scenarios, sector_metadata
+
+    except Exception as e:
+        print(f"Error fetching configure modal data: {e}")
+        import traceback
+        traceback.print_exc()
+        return [], {}
+
+
 @callback(
     Output('configure-forecast-modal', 'is_open'),
     Output('configure-forecast-modal-content', 'children'),
@@ -1046,9 +1137,11 @@ def initialize_sector_selector(options, current_value):
     State('configure-forecast-modal', 'is_open'),
     State('active-project-store', 'data'),
     State('sectors-store', 'data'),
+    State('existing-scenarios-store', 'data'),
+    State('sector-metadata-store', 'data'),
     prevent_initial_call=True
 )
-def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, active_project, sectors):
+def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, active_project, sectors, existing_scenarios, sector_metadata):
     """Toggle configure forecast modal and render content"""
     ctx = callback_context
     if not ctx.triggered:
@@ -1065,13 +1158,17 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
         if not active_project or not sectors:
             return True, dbc.Alert('Please load a project first.', color='warning')
 
+        # Initialize sector_metadata if None
+        if not sector_metadata:
+            sector_metadata = {}
+
         # Render configure form matching React version exactly
         modal_content = html.Div([
             # Section A: Basic Configuration (3-column grid)
             html.Div([
                 html.H5('Basic Configuration', className='mb-3'),
                 dbc.Row([
-                    # Scenario Name
+                    # Scenario Name with duplicate warning
                     dbc.Col([
                         dbc.Label('Scenario Name *', className='fw-bold'),
                         dbc.Input(
@@ -1079,7 +1176,14 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
                             type='text',
                             placeholder='Project_Demand_V1',
                             value='Project_Demand_V1',
-                            className='mb-3'
+                            className='mb-1'
+                        ),
+                        # Duplicate warning (hidden by default, shown via callback)
+                        html.Div(
+                            id='scenario-name-warning',
+                            children=[],
+                            className='mt-1',
+                            style={'minHeight': '20px'}
                         )
                     ], width=4),
 
@@ -1154,14 +1258,13 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
                                 )
                             ], style={'width': '25%', 'padding': '0.75rem'}),
 
-                            # Column 3: MLR Parameters (conditional dropdown)
+                            # Column 3: MLR Parameters (conditional dropdown) - DYNAMIC from correlation
                             html.Div(
                                 dcc.Dropdown(
                                     id={'type': 'mlr-params', 'sector': idx},
                                     options=[
-                                        {'label': 'GDP', 'value': 'GDP'},
-                                        {'label': 'Population', 'value': 'Population'},
-                                        {'label': 'Income', 'value': 'Income'}
+                                        {'label': param, 'value': param}
+                                        for param in sector_metadata.get(sector, {}).get('mlr_params', ['GDP', 'Population', 'Income'])
                                     ],
                                     multi=True,
                                     placeholder='Select parameters...',
@@ -1171,11 +1274,14 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
                                 id={'type': 'mlr-params-container', 'sector': idx}
                             ),
 
-                            # Column 4: WAM Years (conditional select)
+                            # Column 4: WAM Years (conditional select) - DYNAMIC from row count
                             html.Div(
                                 dcc.Dropdown(
                                     id={'type': 'wam-years', 'sector': idx},
-                                    options=[{'label': str(i), 'value': i} for i in range(3, 11)],
+                                    options=[
+                                        {'label': str(i), 'value': i}
+                                        for i in range(3, sector_metadata.get(sector, {}).get('max_wam_window', 10) + 1)
+                                    ],
                                     value=3,
                                     clearable=False,
                                     style={'fontSize': '0.875rem', 'width': '80px'}
@@ -1202,6 +1308,40 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
         return True, modal_content
 
     return no_update, no_update
+
+
+# NEW: Callback to show duplicate scenario warning (React parity)
+@callback(
+    Output('scenario-name-warning', 'children'),
+    Input('forecast-scenario-name', 'value'),
+    State('existing-scenarios-store', 'data'),
+    prevent_initial_call=False
+)
+def check_scenario_name_duplicate(scenario_name, existing_scenarios):
+    """
+    Check if scenario name already exists and show warning
+    Matches React behavior: warning only, doesn't block
+    """
+    if not scenario_name or not existing_scenarios:
+        return []
+
+    scenario_name_lower = scenario_name.strip().lower()
+    is_duplicate = any(
+        existing.lower() == scenario_name_lower
+        for existing in existing_scenarios
+    )
+
+    if is_duplicate:
+        return dbc.Alert([
+            html.I(className='bi bi-exclamation-triangle me-2'),
+            html.Span('This scenario name already exists. If you continue, the previous results will be replaced.')
+        ], color='warning', className='py-2 px-3 mb-0', style={'fontSize': '0.8rem'})
+    else:
+        return html.Small(
+            f'Default name "Project_Demand_V1" is pre-filled — you can rename if needed.',
+            className='text-muted',
+            style={'fontSize': '0.75rem'}
+        )
 
 
 # ============================================================================
