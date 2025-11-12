@@ -413,7 +413,7 @@ def create_project(n_clicks, name, location, description, recent_projects):
             'version': '1.0'
         }
 
-        with open(os.path.join(project_path, 'project.json'), 'w') as f:
+        with open(os.path.join(project_path, 'project.json'), 'w', encoding='utf-8') as f:
             json.dump(metadata, f, indent=2)
 
         # Create README.md
@@ -445,7 +445,7 @@ def create_project(n_clicks, name, location, description, recent_projects):
 
 """
 
-        with open(os.path.join(project_path, 'README.md'), 'w') as f:
+        with open(os.path.join(project_path, 'README.md'), 'w', encoding='utf-8') as f:
             f.write(readme_content)
 
         # Create project data

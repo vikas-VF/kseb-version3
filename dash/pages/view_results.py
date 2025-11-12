@@ -85,7 +85,7 @@ def format_percentage(value):
 # LAYOUT
 # =====================================================================
 
-def layout():
+def layout(active_project=None):
     """Main layout for PyPSA View Results page."""
     return html.Div([
         # State stores

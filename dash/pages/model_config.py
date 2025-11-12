@@ -32,7 +32,7 @@ SOLVER_OPTIONS = [
 # LAYOUT
 # =====================================================================
 
-def layout():
+def layout(active_project=None):
     """Main layout for PyPSA Model Configuration page."""
     return html.Div([
         # State stores

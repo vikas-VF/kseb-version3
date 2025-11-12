@@ -305,6 +305,18 @@ def render_step_2(state, scenarios):
         html.H3('Total Demand Source', className='mb-3 text-center'),
         html.P('Choose where to pull annual demand targets from.', className='text-muted mb-4 text-center'),
 
+        # Single hidden radio for source selection (required for callbacks)
+        dbc.RadioItems(
+            id='source-radio',
+            options=[
+                {'label': 'Template', 'value': 'template'},
+                {'label': 'Projection', 'value': 'projection'}
+            ],
+            value=state.get('demandSource', 'template'),
+            inline=True,
+            style={'display': 'none'}  # Hidden - selection happens via card clicks
+        ),
+
         dbc.Row([
             dbc.Col([
                 dbc.Card([
@@ -315,11 +327,11 @@ def render_step_2(state, scenarios):
                         ], className='mb-2'),
                         html.P('Requires a \'Total_Demand\' sheet in your input Excel file.',
                               className='small text-muted mb-3'),
-                        dbc.RadioItems(
-                            id='source-radio',
-                            options=[{'label': '', 'value': 'template'}],
-                            value='template' if state.get('demandSource') == 'template' else None,
-                            inline=True
+                        dbc.Button(
+                            'Select',
+                            id='select-template-btn',
+                            color='primary' if state.get('demandSource') == 'template' else 'outline-primary',
+                            size='sm'
                         )
                     ])
                 ], className='h-100 border-primary' if state.get('demandSource') == 'template' else 'h-100',
@@ -343,11 +355,12 @@ def render_step_2(state, scenarios):
                             ),
                             is_open=state.get('demandSource') == 'projection'
                         ),
-                        dbc.RadioItems(
-                            id='source-radio',
-                            options=[{'label': '', 'value': 'projection'}],
-                            value='projection' if state.get('demandSource') == 'projection' else None,
-                            inline=True
+                        dbc.Button(
+                            'Select',
+                            id='select-projection-btn',
+                            color='primary' if state.get('demandSource') == 'projection' else 'outline-primary',
+                            size='sm',
+                            disabled=not scenarios
                         )
                     ])
                 ], className='h-100 border-primary' if state.get('demandSource') == 'projection' else 'h-100',
