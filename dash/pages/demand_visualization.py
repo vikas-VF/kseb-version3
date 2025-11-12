@@ -543,93 +543,315 @@ def load_sector_data(sector, start_year, end_year, scenario, active_project):
 
 
 # ==================================================
-# PART 3: T&D LOSSES TAB
+# PART 3: T&D LOSSES TAB - TIME-VARYING POINTS (React Parity)
 # ==================================================
 
-# Load T&D losses data for scenario
+# Load T&D loss points when scenario changes
 @callback(
-    Output('viz-td-losses', 'data'),
+    Output('viz-td-loss-points', 'data'),
     Input('viz-scenario-selector', 'value'),
     State('active-project-store', 'data'),
     prevent_initial_call=True
 )
-def load_td_losses(scenario, active_project):
-    """Load T&D losses configuration from backend"""
+def load_td_loss_points(scenario, active_project):
+    """Load T&D loss points from backend"""
     if not scenario or not active_project:
-        return {}
+        from datetime import datetime
+        import uuid
+        return [{'id': str(uuid.uuid4()), 'year': datetime.now().year, 'loss': 15}]
 
     try:
         response = api.get_td_losses(active_project['path'], scenario)
-        return response.get('losses', {})
+        points = response.get('data', [])
+
+        # Add unique IDs for frontend
+        import uuid
+        for point in points:
+            if 'id' not in point:
+                point['id'] = str(uuid.uuid4())
+
+        if not points:
+            from datetime import datetime
+            points = [{'id': str(uuid.uuid4()), 'year': datetime.now().year, 'loss': 15}]
+
+        return points
     except Exception as e:
         print(f"Error loading T&D losses: {e}")
-        return {}
+        from datetime import datetime
+        import uuid
+        return [{'id': str(uuid.uuid4()), 'year': datetime.now().year, 'loss': 15}]
 
 
-# Update T&D loss input when sector changes
+# Render list of editable loss points
 @callback(
-    Output('viz-td-loss-input', 'value'),
-    Input('viz-td-sector-selector', 'value'),
-    State('viz-td-losses', 'data'),
+    Output('viz-td-points-list', 'children'),
+    Input('viz-td-loss-points', 'data')
+)
+def render_td_points_list(points):
+    """Render editable list of loss points"""
+    import uuid
+    if not points:
+        return html.Div('No data points', style={'textAlign': 'center', 'padding': '20px', 'color': '#64748b'})
+
+    point_cards = []
+    for point in points:
+        point_id = point.get('id', str(uuid.uuid4()))
+
+        point_cards.append(
+            dbc.Card([
+                dbc.CardBody([
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Label('Year', style={'fontSize': '0.75rem', 'fontWeight': '600', 'color': '#64748b'}),
+                            dbc.Input(
+                                id={'type': 'td-year-input', 'index': point_id},
+                                type='number',
+                                value=point.get('year'),
+                                min=2000,
+                                max=2100,
+                                step=1,
+                                size='sm'
+                            )
+                        ], width=5),
+                        dbc.Col([
+                            dbc.Label('Loss %', style={'fontSize': '0.75rem', 'fontWeight': '600', 'color': '#64748b'}),
+                            dbc.Input(
+                                id={'type': 'td-loss-input', 'index': point_id},
+                                type='number',
+                                value=point.get('loss'),
+                                min=0,
+                                max=100,
+                                step=0.1,
+                                size='sm'
+                            )
+                        ], width=5),
+                        dbc.Col([
+                            dbc.Button(
+                                html.I(className='bi bi-trash'),
+                                id={'type': 'delete-td-point-btn', 'index': point_id},
+                                color='danger',
+                                outline=True,
+                                size='sm',
+                                style={'marginTop': '20px'}
+                            )
+                        ], width=2)
+                    ])
+                ])
+            ], className='mb-2', style={'backgroundColor': 'white', 'border': '1px solid #E2E8F0'})
+        )
+
+    return html.Div(point_cards)
+
+
+# Add new data point
+@callback(
+    Output('viz-td-loss-points', 'data', allow_duplicate=True),
+    Input('viz-add-td-point-btn', 'n_clicks'),
+    State('viz-td-loss-points', 'data'),
     prevent_initial_call=True
 )
-def update_td_loss_input(sector, td_losses):
-    """Update input field with sector's T&D loss value"""
-    if not sector:
-        return None
+def add_td_point(n_clicks, current_points):
+    """Add new T&D loss point"""
+    if not n_clicks:
+        return no_update
 
-    return td_losses.get(sector, 5.0)  # Default 5%
+    import uuid
+    from datetime import datetime
+
+    # Get last year and increment
+    if current_points:
+        last_year = max([p.get('year', datetime.now().year) for p in current_points])
+        new_year = last_year + 1
+    else:
+        new_year = datetime.now().year
+
+    new_point = {
+        'id': str(uuid.uuid4()),
+        'year': new_year,
+        'loss': 15  # Default 15%
+    }
+
+    return current_points + [new_point]
 
 
-# Render T&D losses chart
+# Update point values when inputs change
 @callback(
-    Output('viz-td-losses-chart', 'children'),
-    Input('viz-td-losses', 'data'),
-    State('viz-scenario-selector', 'value'),
-    State('viz-start-year', 'value'),
-    State('viz-end-year', 'value'),
-    State('active-project-store', 'data')
+    Output('viz-td-loss-points', 'data', allow_duplicate=True),
+    Input({'type': 'td-year-input', 'index': ALL}, 'value'),
+    Input({'type': 'td-loss-input', 'index': ALL}, 'value'),
+    State({'type': 'td-year-input', 'index': ALL}, 'id'),
+    State({'type': 'td-loss-input', 'index': ALL}, 'id'),
+    State('viz-td-loss-points', 'data'),
+    prevent_initial_call=True
 )
-def render_td_losses_chart(td_losses, scenario, start_year, end_year, active_project):
-    """Render T&D losses area chart"""
-    if not td_losses or not scenario or not active_project:
-        return dbc.Alert('No T&D losses data available.', color='info')
+def update_td_point_values(years, losses, year_ids, loss_ids, current_points):
+    """Update point values when user edits inputs"""
+    if not years or not losses or not current_points:
+        return no_update
+
+    # Update points with new values
+    updated_points = []
+    for point in current_points:
+        point_id = point['id']
+
+        # Find matching year and loss values
+        year_value = point['year']
+        loss_value = point['loss']
+
+        for i, year_id in enumerate(year_ids):
+            if year_id['index'] == point_id:
+                year_value = years[i] if years[i] is not None else year_value
+                break
+
+        for i, loss_id in enumerate(loss_ids):
+            if loss_id['index'] == point_id:
+                loss_value = losses[i] if losses[i] is not None else loss_value
+                break
+
+        updated_points.append({
+            'id': point_id,
+            'year': year_value,
+            'loss': loss_value
+        })
+
+    return updated_points
+
+
+# Delete point
+@callback(
+    Output('viz-td-loss-points', 'data', allow_duplicate=True),
+    Input({'type': 'delete-td-point-btn', 'index': ALL}, 'n_clicks'),
+    State({'type': 'delete-td-point-btn', 'index': ALL}, 'id'),
+    State('viz-td-loss-points', 'data'),
+    prevent_initial_call=True
+)
+def delete_td_point(n_clicks_list, button_ids, current_points):
+    """Delete T&D loss point"""
+    if not any(n_clicks_list) or not current_points:
+        return no_update
+
+    # Find which button was clicked
+    ctx = callback_context
+    if not ctx.triggered:
+        return no_update
+
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    import json
+    button_data = json.loads(button_id)
+    point_id_to_delete = button_data['index']
+
+    # Filter out the deleted point
+    updated_points = [p for p in current_points if p['id'] != point_id_to_delete]
+
+    # Ensure at least one point remains
+    if not updated_points:
+        import uuid
+        from datetime import datetime
+        updated_points = [{
+            'id': str(uuid.uuid4()),
+            'year': datetime.now().year,
+            'loss': 15
+        }]
+
+    return updated_points
+
+
+# Render preview chart with LINEAR INTERPOLATION
+@callback(
+    Output('viz-td-preview-chart', 'children'),
+    Input('viz-td-loss-points', 'data'),
+    State('viz-start-year', 'value'),
+    State('viz-end-year', 'value')
+)
+def render_td_preview_chart(points, start_year, end_year):
+    """Render T&D losses preview chart with linear interpolation"""
+    if not points:
+        return dbc.Alert('No data points to display', color='info')
 
     if not start_year or not end_year:
-        return dbc.Alert('Please set year range.', color='info')
+        start_year = 2020
+        end_year = 2050
 
     try:
+        # Sort points by year
+        sorted_points = sorted([p for p in points if p.get('year') and p.get('loss') is not None],
+                              key=lambda x: x['year'])
+
+        if not sorted_points:
+            return dbc.Alert('No valid data points', color='warning')
+
         # Create years range
         years = list(range(start_year, end_year + 1))
 
-        # Create figure with all sectors
+        # LINEAR INTERPOLATION (matches React logic)
+        interpolated_losses = []
+        for year in years:
+            # Find bounding points
+            before_points = [p for p in sorted_points if p['year'] <= year]
+            after_points = [p for p in sorted_points if p['year'] >= year]
+
+            if not before_points:
+                # Year is before all points, use first point
+                interpolated_losses.append(sorted_points[0]['loss'])
+            elif not after_points:
+                # Year is after all points, use last point
+                interpolated_losses.append(sorted_points[-1]['loss'])
+            else:
+                # Interpolate between before and after
+                p1 = before_points[-1]  # Last point before/at year
+                p2 = after_points[0]    # First point after/at year
+
+                if p1['year'] == p2['year']:
+                    # Exact match
+                    interpolated_losses.append(p1['loss'])
+                else:
+                    # Linear interpolation: loss = loss1 + (year - year1) / (year2 - year1) * (loss2 - loss1)
+                    fraction = (year - p1['year']) / (p2['year'] - p1['year'])
+                    interpolated_loss = p1['loss'] + fraction * (p2['loss'] - p1['loss'])
+                    interpolated_losses.append(interpolated_loss)
+
+        # Create Plotly figure
         fig = go.Figure()
 
-        # Add trace for each sector
-        for sector, loss_pct in td_losses.items():
-            # Constant loss percentage over time
-            loss_values = [loss_pct] * len(years)
+        # Add area trace
+        fig.add_trace(go.Scatter(
+            x=years,
+            y=interpolated_losses,
+            mode='lines',
+            fill='tozeroy',
+            name='T&D Loss %',
+            line=dict(color='#EF4444', width=3),
+            fillcolor='rgba(239, 68, 68, 0.2)',
+            hovertemplate='Year: %{x}<br>Loss: %{y:.2f}%<extra></extra>'
+        ))
 
-            fig.add_trace(go.Scatter(
-                x=years,
-                y=loss_values,
-                name=sector,
-                mode='lines',
-                fill='tonexty' if len(fig.data) > 0 else 'tozeroy',
-                line=dict(width=2),
-                hovertemplate=f'{sector}<br>Year: %{{x}}<br>Loss: %{{y:.2f}}%<extra></extra>'
-            ))
+        # Add markers for actual data points
+        point_years = [p['year'] for p in sorted_points]
+        point_losses = [p['loss'] for p in sorted_points]
+
+        fig.add_trace(go.Scatter(
+            x=point_years,
+            y=point_losses,
+            mode='markers',
+            name='Data Points',
+            marker=dict(
+                size=10,
+                color='white',
+                line=dict(color='#EF4444', width=3)
+            ),
+            hovertemplate='Year: %{x}<br>Loss: %{y:.2f}%<extra></extra>'
+        ))
 
         # Update layout
         fig.update_layout(
-            title='T&D Losses by Sector (%)',
+            title='T&D Losses Preview (with Linear Interpolation)',
             xaxis_title='Year',
-            yaxis_title='T&D Loss (%)',
+            yaxis_title='Loss Percentage (%)',
             hovermode='x unified',
-            legend=dict(orientation='h', y=-0.2),
             height=400,
             template='plotly_white',
-            yaxis=dict(range=[0, max(td_losses.values(), default=10) * 1.2])
+            showlegend=True,
+            legend=dict(orientation='h', y=-0.2)
         )
 
         return dcc.Graph(figure=fig, config={'displayModeBar': True})
@@ -640,51 +862,87 @@ def render_td_losses_chart(td_losses, scenario, start_year, end_year, active_pro
 
 # Save T&D losses
 @callback(
-    Output('viz-td-save-status', 'children'),
-    Output('viz-td-losses', 'data', allow_duplicate=True),
-    Input('viz-save-td-losses-btn', 'n_clicks'),
-    State('viz-td-sector-selector', 'value'),
-    State('viz-td-loss-input', 'value'),
+    Output('viz-toast-container', 'children', allow_duplicate=True),
+    Output('viz-td-save-text', 'children'),
+    Input('viz-save-td-btn', 'n_clicks'),
+    State('viz-td-loss-points', 'data'),
     State('viz-scenario-selector', 'value'),
-    State('viz-td-losses', 'data'),
     State('active-project-store', 'data'),
     prevent_initial_call=True
 )
-def save_td_losses(n_clicks, sector, loss_value, scenario, current_losses, active_project):
-    """Save T&D loss value for sector"""
-    if not n_clicks or not sector or loss_value is None:
+def save_td_losses(n_clicks, points, scenario, active_project):
+    """Save T&D loss points to backend"""
+    if not n_clicks or not points:
         return no_update, no_update
 
     if not scenario or not active_project:
-        return dbc.Alert('Project or scenario not selected.', color='warning'), no_update
+        return dbc.Toast(
+            '⚠️ Please select a scenario first',
+            header='Cannot Save',
+            icon='warning',
+            duration=3000,
+            is_open=True,
+            style={'position': 'fixed', 'top': '20px', 'right': '20px', 'zIndex': 9999}
+        ), 'Save'
 
     try:
-        # Update losses dict
-        updated_losses = {**current_losses, sector: loss_value}
+        # Remove 'id' field before saving
+        clean_points = [{'year': int(p['year']), 'loss': float(p['loss'])} for p in points
+                       if p.get('year') is not None and p.get('loss') is not None]
+
+        # Sort by year
+        clean_points.sort(key=lambda x: x['year'])
 
         # Save to backend
         response = api.save_td_losses(
             active_project['path'],
             scenario,
-            updated_losses
+            clean_points
         )
 
         if response.get('success'):
-            toast = dbc.Toast(
-                [html.P(f'T&D loss for {sector} saved: {loss_value}%', className='mb-0')],
-                header='Saved Successfully',
+            return dbc.Toast(
+                '✅ T&D losses saved successfully!',
+                header='Success',
                 icon='success',
-                duration=3000,
+                duration=2000,
                 is_open=True,
-                style={'position': 'fixed', 'top': 20, 'right': 20, 'zIndex': 9999}
-            )
-            return toast, updated_losses
+                style={'position': 'fixed', 'top': '20px', 'right': '20px', 'zIndex': 9999}
+            ), 'Saved!'
         else:
-            return dbc.Alert('Failed to save T&D losses.', color='danger'), no_update
+            return dbc.Toast(
+                f'❌ Error: {response.get("error", "Unknown error")}',
+                header='Save Failed',
+                icon='danger',
+                duration=4000,
+                is_open=True,
+                style={'position': 'fixed', 'top': '20px', 'right': '20px', 'zIndex': 9999}
+            ), 'Save'
 
     except Exception as e:
-        print(f"Error saving T&D losses: {e}")
-        return dbc.Alert(f'Error: {str(e)}', color='danger'), no_update
+        return dbc.Toast(
+            f'❌ Error saving: {str(e)}',
+            header='Error',
+            icon='danger',
+            duration=4000,
+            is_open=True,
+            style={'position': 'fixed', 'top': '20px', 'right': '20px', 'zIndex': 9999}
+        ), 'Save'
+
+
+# Reset save button text after delay
+@callback(
+    Output('viz-td-save-text', 'children', allow_duplicate=True),
+    Input('viz-td-save-text', 'children'),
+    prevent_initial_call=True
+)
+def reset_td_save_button(text):
+    """Reset save button text after 2 seconds"""
+    if text == 'Saved!':
+        import time
+        time.sleep(2)
+        return 'Save'
+    return no_update
 
 
 # ==================================================
