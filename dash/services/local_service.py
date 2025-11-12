@@ -682,9 +682,9 @@ class LocalService:
     # ==================== CORRELATION ====================
 
     def get_sector_correlation(self, project_path: str, sector: str) -> Dict:
-        """Calculate correlation for sector"""
+        """Calculate correlation matrix for sector with economic indicators"""
         try:
-            # Extract sector data
+            # Extract sector data (includes merged economic indicators)
             data_response = self.extract_sector_data(project_path, sector)
 
             if not data_response.get('success'):
@@ -692,14 +692,59 @@ class LocalService:
 
             df = pd.DataFrame(data_response['data'])
 
+            # Get numeric columns only (exclude Year)
+            numeric_cols = [col for col in df.columns
+                          if col.lower() not in ['year'] and
+                          pd.api.types.is_numeric_dtype(df[col])]
+
+            if len(numeric_cols) < 2:
+                return {'success': False, 'error': 'Not enough numeric columns for correlation'}
+
             # Calculate correlation matrix
-            numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns
-            correlation_matrix = df[numeric_cols].corr()
+            corr_df = df[numeric_cols].corr()
+
+            # Convert to format expected by heatmap
+            drivers = corr_df.columns.tolist()
+            values = corr_df.values.tolist()
+
+            # Extract top correlations (excluding self-correlations)
+            top_correlations = []
+            for i, driver1 in enumerate(drivers):
+                for j, driver2 in enumerate(drivers):
+                    if i < j:  # Only upper triangle (avoid duplicates)
+                        corr_value = corr_df.iloc[i, j]
+
+                        # Determine strength and badge color
+                        abs_corr = abs(corr_value)
+                        if abs_corr >= 0.7:
+                            strength = 'Strong'
+                            badge_color = 'success'
+                        elif abs_corr >= 0.4:
+                            strength = 'Moderate'
+                            badge_color = 'warning'
+                        else:
+                            strength = 'Weak'
+                            badge_color = 'secondary'
+
+                        top_correlations.append({
+                            'driver1': driver1,
+                            'driver2': driver2,
+                            'value': corr_value,
+                            'strength': strength,
+                            'badge_color': badge_color
+                        })
+
+            # Sort by absolute correlation value (strongest first)
+            top_correlations.sort(key=lambda x: abs(x['value']), reverse=True)
 
             return {
                 'success': True,
-                'correlation_matrix': correlation_matrix.to_dict(),
-                'top_correlations': []  # TODO: Extract top correlations
+                'correlation_matrix': {
+                    'values': values,
+                    'drivers': drivers
+                },
+                'drivers': drivers,
+                'top_correlations': top_correlations[:10]  # Top 10 correlations
             }
 
         except Exception as e:
