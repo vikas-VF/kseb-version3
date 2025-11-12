@@ -3,11 +3,6 @@ dash
 dash-bootstrap-components
 plotly
 
-# Backend/API Framework
-fastapi
-uvicorn
-pydantic
-
 # Data Processing
 numpy
 pandas
@@ -17,7 +12,6 @@ scipy
 
 # PyPSA and Energy Modeling
 pypsa
-
 
 # Visualization
 matplotlib
@@ -31,14 +25,12 @@ xlsxwriter
 python-dateutil
 holidays
 pytz
-requests
 
 # File System
 pathlib
 
-# Additional Dependencies
-python-multipart
-aiofiles
+# Note: FastAPI/Uvicorn removed - this is now a self-contained Dash webapp
+# All business logic runs directly in-process, no HTTP backend needed
 
 # ============================================================================
 # PERFORMANCE OPTIMIZATION PACKAGES

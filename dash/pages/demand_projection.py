@@ -23,7 +23,7 @@ import os
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from services.api_client import api
+from services.local_service import service as api
 from utils.state_manager import StateManager, ConversionFactors
 
 
@@ -80,78 +80,66 @@ def layout(active_project=None):
             style={'display': 'none'}
         ),
 
-        # Header
+        # COMPACT HEADER - React-style single-row layout
         html.Div([
+            # View Toggle (Compact inline buttons)
             html.Div([
-                html.H2(
-                    '📈 Demand Forecasting - Analysis & Configuration',
-                    style={'fontSize': '1.75rem', 'fontWeight': '700',
-                          'color': '#1e293b', 'marginBottom': '0.5rem'}
-                ),
-                html.P(
-                    f'Project: {active_project.get("name", "Unknown")}',
-                    style={'fontSize': '0.875rem', 'color': '#64748b', 'marginBottom': '0'}
-                )
-            ], style={'flex': '1'}),
-
-            html.Div([
-                dbc.Button(
-                    '⚙️ Configure Forecast',
-                    id='open-configure-forecast-btn',
-                    color='success',
-                    size='lg'
-                )
-            ])
-        ], style={'display': 'flex', 'alignItems': 'center', 'marginBottom': '1.5rem'}),
-
-        # View Toggle
-        dbc.Card([
-            dbc.CardBody([
                 dbc.ButtonGroup([
                     dbc.Button(
-                        [
-                            html.Span('📊 ', style={'marginRight': '0.5rem'}),
-                            'Consolidated View'
-                        ],
+                        [html.I(className='bi bi-bar-chart-fill me-1'), 'Consolidated View'],
                         id='consolidated-view-btn',
+                        size='sm',
                         color='primary',
                         outline=False,
-                        className='px-4'
+                        style={'fontSize': '0.875rem', 'fontWeight': '600'}
                     ),
                     dbc.Button(
-                        [
-                            html.Span('🎯 ', style={'marginRight': '0.5rem'}),
-                            'Sector-Specific View'
-                        ],
+                        [html.I(className='bi bi-sliders me-1'), 'Sector View'],
                         id='sector-view-btn',
+                        size='sm',
                         color='primary',
                         outline=True,
-                        className='px-4'
+                        style={'fontSize': '0.875rem', 'fontWeight': '600'}
                     )
-                ], size='lg', className='w-100')
-            ], className='p-2')
-        ], className='mb-3'),
+                ], style={'backgroundColor': 'rgba(226, 232, 240, 0.7)', 'padding': '0.125rem',
+                         'borderRadius': '0.375rem', 'border': '1px solid rgba(203, 213, 225, 0.5)'})
+            ], style={'marginRight': '1rem'}),
+
+            # Unit Selector (Compact inline)
+            html.Div([
+                html.Label('Unit', style={'fontSize': '0.875rem', 'fontWeight': '600',
+                                         'color': '#475569', 'marginRight': '0.5rem',
+                                         'marginBottom': '0'}),
+                dcc.Dropdown(
+                    id='consolidated-unit-selector',
+                    options=[
+                        {'label': 'kWh', 'value': 'kwh'},
+                        {'label': 'MWh', 'value': 'mwh'},
+                        {'label': 'GWh', 'value': 'gwh'},
+                        {'label': 'TWh', 'value': 'twh'}
+                    ],
+                    value='mwh',
+                    clearable=False,
+                    style={'width': '110px', 'fontSize': '0.875rem'}
+                )
+            ], style={'display': 'flex', 'alignItems': 'center', 'marginRight': '1rem'}),
+
+            # Configure Forecast Button (Compact)
+            dbc.Button(
+                [html.I(className='bi bi-gear-fill me-2'), 'Configure Forecast'],
+                id='open-configure-forecast-btn',
+                size='sm',
+                color='indigo',
+                style={'fontSize': '0.875rem', 'fontWeight': '600',
+                      'backgroundColor': '#4f46e5', 'border': 'none',
+                      'boxShadow': '0 1px 2px 0 rgba(0, 0, 0, 0.05)'}
+            )
+        ], style={'display': 'flex', 'justifyContent': 'center', 'alignItems': 'center',
+                 'marginBottom': '1rem', 'padding': '0.5rem',
+                 'backgroundColor': '#f8fafc', 'borderRadius': '0.5rem'}),
 
         # Consolidated View Content
         html.Div([
-            # Top controls row
-            dbc.Row([
-                dbc.Col([
-                    dbc.Label('Unit:', className='fw-bold me-2'),
-                    dcc.Dropdown(
-                        id='consolidated-unit-selector',
-                        options=[
-                            {'label': 'MWh', 'value': 'mwh'},
-                            {'label': 'kWh', 'value': 'kwh'},
-                            {'label': 'GWh', 'value': 'gwh'},
-                            {'label': 'TWh', 'value': 'twh'}
-                        ],
-                        value='mwh',
-                        clearable=False,
-                        style={'width': '150px'}
-                    )
-                ], width='auto')
-            ], className='mb-3'),
 
             # Tabs
             dbc.Tabs([
@@ -180,34 +168,44 @@ def layout(active_project=None):
 
         # Sector-Specific View Content
         html.Div([
-            # Sector selector and unit
-            dbc.Row([
-                dbc.Col([
-                    dbc.Label('Sector:', className='fw-bold me-2'),
-                    dcc.Dropdown(
-                        id='sector-selector',
-                        options=[],
-                        value=None,
-                        clearable=False,
-                        style={'width': '300px'}
-                    )
-                ], width='auto'),
-                dbc.Col([
-                    dbc.Label('Unit:', className='fw-bold me-2'),
-                    dcc.Dropdown(
-                        id='sector-unit-selector',
-                        options=[
-                            {'label': 'MWh', 'value': 'mwh'},
-                            {'label': 'kWh', 'value': 'kwh'},
-                            {'label': 'GWh', 'value': 'gwh'},
-                            {'label': 'TWh', 'value': 'twh'}
-                        ],
-                        value='mwh',
-                        clearable=False,
-                        style={'width': '150px'}
-                    )
-                ], width='auto')
-            ], className='mb-3'),
+            # Horizontal Scrollable Sector Pills (React-style)
+            html.Div([
+                html.Div(
+                    id='sector-pills-container',
+                    style={
+                        'overflowX': 'auto',
+                        'whiteSpace': 'nowrap',
+                        'padding': '0.5rem',
+                        'backgroundColor': '#ffffff',
+                        'borderRadius': '0.5rem',
+                        'border': '1px solid rgba(226, 232, 240, 0.8)',
+                        'boxShadow': '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+                        'marginBottom': '0.75rem'
+                    },
+                    children=[]  # Will be populated by callback
+                )
+            ]),
+
+            # Hidden dropdown for backward compatibility with callbacks
+            dcc.Dropdown(
+                id='sector-selector',
+                options=[],
+                value=None,
+                clearable=False,
+                style={'display': 'none'}
+            ),
+            dcc.Dropdown(
+                id='sector-unit-selector',
+                options=[
+                    {'label': 'MWh', 'value': 'mwh'},
+                    {'label': 'kWh', 'value': 'kwh'},
+                    {'label': 'GWh', 'value': 'gwh'},
+                    {'label': 'TWh', 'value': 'twh'}
+                ],
+                value='mwh',
+                clearable=False,
+                style={'display': 'none'}
+            ),
 
             # Tabs
             dbc.Tabs([
@@ -245,7 +243,11 @@ def layout(active_project=None):
         dcc.Store(id='forecast-process-state', data=None),
 
         # Interval for SSE polling (alternative to EventSource)
-        dcc.Interval(id='forecast-progress-interval', interval=1000, disabled=True)
+        dcc.Interval(id='forecast-progress-interval', interval=1000, disabled=True),
+
+        # Hidden divs for callback outputs (referenced by forecast_callbacks.py)
+        html.Div(id='forecast-execution-status', style={'display': 'none'}),
+        html.Div(id='sectors-list-preview', style={'display': 'none'})
 
     ], fluid=True, style={'padding': '2rem'})
 
@@ -302,23 +304,45 @@ def toggle_view_mode(consolidated_clicks, sector_clicks, current_state):
 @callback(
     Output('sectors-store', 'data'),
     Output('sector-selector', 'options'),
+    Output('sector-pills-container', 'children'),
     Output('color-config-store', 'data'),
-    Input('active-project-store', 'data'),
-    prevent_initial_call=True
+    Input('active-project-store', 'data')
 )
 def load_project_sectors(active_project):
     """Load sectors and color configuration when project loads"""
     if not active_project or not active_project.get('path'):
-        return [], [], {}
+        return [], [], [], {}
 
     try:
         # Fetch sectors
         sectors_response = api.get_sectors(active_project['path'])
         sectors = sectors_response.get('sectors', [])
 
-        # Create dropdown options
+        # Create dropdown options (for backward compatibility)
         sector_options = [{'label': sector, 'value': idx}
                          for idx, sector in enumerate(sectors)]
+
+        # Create horizontal scrollable sector pills (React-style)
+        sector_pills = []
+        for idx, sector in enumerate(sectors):
+            pill = dbc.Button(
+                sector,
+                id={'type': 'sector-pill', 'index': idx},
+                size='sm',
+                outline=True if idx != 0 else False,
+                color='primary' if idx == 0 else 'primary',
+                style={
+                    'marginRight': '0.25rem',
+                    'fontSize': '0.875rem',
+                    'fontWeight': '600',
+                    'whiteSpace': 'nowrap',
+                    'border': '2px solid transparent' if idx == 0 else '2px solid #cbd5e1',
+                    'backgroundColor': '#4f46e5' if idx == 0 else '#ffffff',
+                    'color': '#ffffff' if idx == 0 else '#475569'
+                },
+                n_clicks=0
+            )
+            sector_pills.append(pill)
 
         # Fetch color configuration
         try:
@@ -327,11 +351,11 @@ def load_project_sectors(active_project):
         except:
             colors = {}
 
-        return sectors, sector_options, colors
+        return sectors, sector_options, sector_pills, colors
 
     except Exception as e:
         print(f"Error loading sectors: {e}")
-        return [], [], {}
+        return [], [], [], {}
 
 
 @callback(
@@ -358,6 +382,59 @@ def load_consolidated_data(sectors, state, active_project):
     except Exception as e:
         print(f"Error loading consolidated data: {e}")
         return None
+
+
+@callback(
+    Output('sector-selector', 'value', allow_duplicate=True),
+    Output('sector-pills-container', 'children', allow_duplicate=True),
+    Input({'type': 'sector-pill', 'index': ALL}, 'n_clicks'),
+    State('sectors-store', 'data'),
+    State('sector-selector', 'value'),
+    prevent_initial_call=True
+)
+def handle_sector_pill_click(n_clicks_list, sectors, current_sector_idx):
+    """Handle sector pill clicks and update styling"""
+    ctx = callback_context
+    if not ctx.triggered or not sectors:
+        return no_update, no_update
+
+    # Find which pill was clicked
+    triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    if not triggered_id or triggered_id == '':
+        return no_update, no_update
+
+    # Parse the clicked sector index
+    import json
+    try:
+        pill_id = json.loads(triggered_id)
+        clicked_idx = pill_id['index']
+    except:
+        return no_update, no_update
+
+    # Update sector pills with new active state
+    sector_pills = []
+    for idx, sector in enumerate(sectors):
+        is_active = (idx == clicked_idx)
+        pill = dbc.Button(
+            sector,
+            id={'type': 'sector-pill', 'index': idx},
+            size='sm',
+            outline=not is_active,
+            color='primary',
+            style={
+                'marginRight': '0.25rem',
+                'fontSize': '0.875rem',
+                'fontWeight': '600',
+                'whiteSpace': 'nowrap',
+                'border': '2px solid transparent' if is_active else '2px solid #cbd5e1',
+                'backgroundColor': '#4f46e5' if is_active else '#ffffff',
+                'color': '#ffffff' if is_active else '#475569'
+            },
+            n_clicks=0
+        )
+        sector_pills.append(pill)
+
+    return clicked_idx, sector_pills
 
 
 @callback(
@@ -399,7 +476,7 @@ def load_sector_data(sector_idx, sectors, active_project, state):
     State('sectors-store', 'data')
 )
 def render_consolidated_data_table(data, unit, sectors):
-    """Render consolidated data table"""
+    """Render consolidated data table with sticky header and first column"""
     if not data or not sectors:
         return dbc.Alert('No data available. Please load project data.', color='info')
 
@@ -415,15 +492,61 @@ def render_consolidated_data_table(data, unit, sectors):
             if col in df.columns:
                 df[col] = df[col] * factor
 
-        # Create table
-        table = dbc.Table.from_dataframe(
-            df,
-            striped=True,
-            bordered=True,
-            hover=True,
-            responsive=True,
-            size='sm',
-            className='mb-0'
+        # Create custom table with sticky header and first column
+        # Table header
+        header_cells = [
+            html.Th(
+                col,
+                style={
+                    'position': 'sticky' if i == 0 else 'static',
+                    'left': '0' if i == 0 else 'auto',
+                    'top': '0',
+                    'zIndex': '20' if i == 0 else '10',
+                    'backgroundColor': '#f8fafc',
+                    'fontWeight': '600',
+                    'borderBottom': '2px solid #e2e8f0',
+                    'padding': '0.5rem',
+                    'fontSize': '0.875rem',
+                    'whiteSpace': 'nowrap'
+                }
+            )
+            for i, col in enumerate(df.columns)
+        ]
+
+        # Table rows
+        table_rows = []
+        for idx, row in df.iterrows():
+            cells = [
+                html.Td(
+                    f'{row[col]:.2f}' if isinstance(row[col], (int, float)) and col != 'Year' else str(row[col]),
+                    style={
+                        'position': 'sticky' if i == 0 else 'static',
+                        'left': '0' if i == 0 else 'auto',
+                        'zIndex': '10' if i == 0 else '1',
+                        'backgroundColor': '#ffffff' if i == 0 else 'transparent',
+                        'padding': '0.5rem',
+                        'fontSize': '0.875rem',
+                        'fontWeight': '700' if i == 0 else '600',
+                        'whiteSpace': 'nowrap',
+                        'borderBottom': '1px solid #f1f5f9'
+                    },
+                    className='table-hover'
+                )
+                for i, col in enumerate(df.columns)
+            ]
+            table_rows.append(html.Tr(cells))
+
+        table = html.Table(
+            [
+                html.Thead(html.Tr(header_cells)),
+                html.Tbody(table_rows)
+            ],
+            style={
+                'width': '100%',
+                'borderCollapse': 'collapse',
+                'fontSize': '0.875rem'
+            },
+            className='table table-sm table-striped table-hover'
         )
 
         return html.Div([
@@ -431,7 +554,16 @@ def render_consolidated_data_table(data, unit, sectors):
                 html.H5(f'Consolidated Electricity Demand ({ConversionFactors.get_label(unit)})',
                        className='mb-3')
             ]),
-            table,
+            html.Div(
+                table,
+                style={
+                    'overflowX': 'auto',
+                    'overflowY': 'auto',
+                    'maxHeight': '78vh',
+                    'border': '1px solid #e2e8f0',
+                    'borderRadius': '0.375rem'
+                }
+            ),
             html.P(
                 f'Showing data in {ConversionFactors.get_label(unit)}. Total sectors: {len(sectors)}',
                 className='text-muted mt-3 mb-0',
@@ -617,7 +749,7 @@ def render_consolidated_line_chart(data, unit, sectors, colors):
     State('sectors-store', 'data')
 )
 def render_sector_data_table(data, unit, sector_idx, sectors):
-    """Render sector-specific data table"""
+    """Render sector-specific data table with sticky header and first column"""
     if not data or sector_idx is None or not sectors:
         return dbc.Alert('No data available. Please select a sector.', color='info')
 
@@ -627,23 +759,79 @@ def render_sector_data_table(data, unit, sector_idx, sectors):
         # Convert data to DataFrame
         df = pd.DataFrame(data)
 
-        # Apply unit conversion
+        # Apply unit conversion ONLY to Electricity columns
         factor = ConversionFactors.FACTORS.get(unit, 1)
-        numeric_cols = [col for col in df.columns if col not in ['Year', 'year']]
+        electricity_cols = [col for col in df.columns
+                           if 'electricity' in col.lower() and col.lower() not in ['year']]
 
-        for col in numeric_cols:
+        for col in electricity_cols:
             if col in df.columns:
+                # Convert to numeric first, handling non-numeric values
+                df[col] = pd.to_numeric(df[col], errors='coerce')
                 df[col] = df[col] * factor
 
-        # Create table
-        table = dbc.Table.from_dataframe(
-            df,
-            striped=True,
-            bordered=True,
-            hover=True,
-            responsive=True,
-            size='sm',
-            className='mb-0'
+        # Create custom table with sticky header and first column
+        # Table header
+        header_cells = [
+            html.Th(
+                col,
+                style={
+                    'position': 'sticky' if i == 0 else 'static',
+                    'left': '0' if i == 0 else 'auto',
+                    'top': '0',
+                    'zIndex': '20' if i == 0 else '10',
+                    'backgroundColor': '#f8fafc',
+                    'fontWeight': '600',
+                    'borderBottom': '2px solid #e2e8f0',
+                    'padding': '0.5rem',
+                    'fontSize': '0.875rem',
+                    'whiteSpace': 'nowrap'
+                }
+            )
+            for i, col in enumerate(df.columns)
+        ]
+
+        # Table rows
+        table_rows = []
+        for idx, row in df.iterrows():
+            cells = []
+            for i, col in enumerate(df.columns):
+                value = row[col]
+                # Format value: 2 decimals for floats, no decimals for Year
+                if col.lower() in ['year']:
+                    formatted_value = str(int(value)) if pd.notna(value) else ''
+                elif pd.notna(value) and isinstance(value, (int, float)):
+                    formatted_value = f'{value:.2f}'
+                else:
+                    formatted_value = str(value) if pd.notna(value) else ''
+
+                cells.append(html.Td(
+                    formatted_value,
+                    style={
+                        'position': 'sticky' if i == 0 else 'static',
+                        'left': '0' if i == 0 else 'auto',
+                        'zIndex': '10' if i == 0 else '1',
+                        'backgroundColor': '#ffffff' if i == 0 else 'transparent',
+                        'padding': '0.5rem',
+                        'fontSize': '0.875rem',
+                        'fontWeight': '700' if i == 0 else '600',
+                        'whiteSpace': 'nowrap',
+                        'borderBottom': '1px solid #f1f5f9'
+                    }
+                ))
+            table_rows.append(html.Tr(cells))
+
+        table = html.Table(
+            [
+                html.Thead(html.Tr(header_cells)),
+                html.Tbody(table_rows)
+            ],
+            style={
+                'width': '100%',
+                'borderCollapse': 'collapse',
+                'fontSize': '0.875rem'
+            },
+            className='table table-sm table-striped table-hover'
         )
 
         return html.Div([
@@ -651,7 +839,16 @@ def render_sector_data_table(data, unit, sector_idx, sectors):
                 html.H5(f'{sector_name} - Demand Data ({ConversionFactors.get_label(unit)})',
                        className='mb-3')
             ]),
-            table,
+            html.Div(
+                table,
+                style={
+                    'overflowX': 'auto',
+                    'overflowY': 'auto',
+                    'maxHeight': '78vh',
+                    'border': '1px solid #e2e8f0',
+                    'borderRadius': '0.375rem'
+                }
+            ),
             html.P(
                 f'Showing data in {ConversionFactors.get_label(unit)}',
                 className='text-muted mt-3 mb-0',
@@ -676,7 +873,7 @@ def render_sector_data_table(data, unit, sector_idx, sectors):
     State('color-config-store', 'data')
 )
 def render_sector_line_chart(data, unit, sector_idx, sectors, colors):
-    """Render sector-specific line chart (multiple models if available)"""
+    """Render sector-specific line chart - ONLY Electricity data"""
     if not data or sector_idx is None or not sectors:
         return dbc.Alert('No data available for chart.', color='info')
 
@@ -684,44 +881,43 @@ def render_sector_line_chart(data, unit, sector_idx, sectors, colors):
         sector_name = sectors[sector_idx]
         df = pd.DataFrame(data)
 
-        # Apply unit conversion
+        # Apply unit conversion ONLY to Electricity column
         factor = ConversionFactors.FACTORS.get(unit, 1)
 
-        # Create figure
+        # Find Electricity column (case-insensitive)
+        electricity_col = None
+        for col in df.columns:
+            if col.lower() == 'electricity':
+                electricity_col = col
+                break
+
+        if not electricity_col:
+            return dbc.Alert('No Electricity data found for this sector.', color='warning')
+
+        # Get Year column (case-insensitive)
+        year_col = 'Year' if 'Year' in df.columns else 'year'
+
+        # Create figure with single line for Electricity
         fig = go.Figure()
 
-        # Models/columns to plot (excluding Year)
-        model_columns = [col for col in df.columns if col not in ['Year', 'year']]
-
-        # Define colors for different models
-        model_colors = {
-            'SLR': '#3b82f6',
-            'MLR': '#10b981',
-            'WAM': '#f59e0b',
-            'Time Series': '#8b5cf6',
-            'Ensemble': '#ef4444'
-        }
-
-        # Add line for each model
-        for col in model_columns:
-            fig.add_trace(go.Scatter(
-                x=df['Year'] if 'Year' in df.columns else df['year'],
-                y=df[col] * factor,
-                name=col,
-                mode='lines+markers',
-                line=dict(width=2, color=model_colors.get(col, colors.get(sector_name, '#ccc'))),
-                marker=dict(size=6),
-                hovertemplate=f'{col}<br>Year: %{{x}}<br>Demand: %{{y:.2f}} {ConversionFactors.get_label(unit)}<extra></extra>'
-            ))
+        fig.add_trace(go.Scatter(
+            x=df[year_col],
+            y=df[electricity_col] * factor,
+            name='Electricity Demand',
+            mode='lines+markers',
+            line=dict(width=3, color=colors.get(sector_name, '#4f46e5')),
+            marker=dict(size=8),
+            hovertemplate=f'{sector_name}<br>Year: %{{x}}<br>Demand: %{{y:.2f}} {ConversionFactors.get_label(unit)}<extra></extra>'
+        ))
 
         fig.update_layout(
-            title=f'{sector_name} - Model Comparison ({ConversionFactors.get_label(unit)})',
+            title=f'{sector_name} - Electricity Demand ({ConversionFactors.get_label(unit)})',
             xaxis_title='Year',
             yaxis_title=f'Electricity Demand ({ConversionFactors.get_label(unit)})',
             hovermode='x unified',
-            legend=dict(orientation='h', y=-0.2),
             height=500,
-            template='plotly_white'
+            template='plotly_white',
+            showlegend=False
         )
 
         return dcc.Graph(figure=fig, config={'displayModeBar': True})
@@ -869,163 +1065,139 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
         if not active_project or not sectors:
             return True, dbc.Alert('Please load a project first.', color='warning')
 
-        # Render configure form
+        # Render configure form matching React version exactly
         modal_content = html.Div([
-            dbc.Tabs([
-                # Basic Configuration Tab
-                dbc.Tab([
+            # Section A: Basic Configuration (3-column grid)
+            html.Div([
+                html.H5('Basic Configuration', className='mb-3'),
+                dbc.Row([
+                    # Scenario Name
+                    dbc.Col([
+                        dbc.Label('Scenario Name *', className='fw-bold'),
+                        dbc.Input(
+                            id='forecast-scenario-name',
+                            type='text',
+                            placeholder='Project_Demand_V1',
+                            value='Project_Demand_V1',
+                            className='mb-3'
+                        )
+                    ], width=4),
+
+                    # Projection Year
+                    dbc.Col([
+                        dbc.Label('Projection Year *', className='fw-bold'),
+                        dbc.Input(
+                            id='forecast-target-year',
+                            type='number',
+                            placeholder='2050',
+                            min=2025,
+                            max=2100,
+                            className='mb-3'
+                        )
+                    ], width=4),
+
+                    # Exclude COVID Years
+                    dbc.Col([
+                        dbc.Label('Data Options', className='fw-bold'),
+                        dbc.Checklist(
+                            id='forecast-exclude-covid',
+                            options=[
+                                {'label': ' Exclude COVID-19 Years (FY 2021-2023)', 'value': 'exclude_covid'}
+                            ],
+                            value=['exclude_covid'],  # Default: checked
+                            className='mt-2'
+                        )
+                    ], width=4)
+                ], className='mb-4')
+            ], className='p-3', style={'backgroundColor': '#f8fafc', 'borderRadius': '0.5rem', 'marginBottom': '1rem'}),
+
+            # Section B: Sector-wise Forecast Configuration Table
+            html.Div([
+                html.H5('Sector-wise Forecast Configuration', className='mb-3'),
+
+                # Table
+                html.Div([
+                    # Table header
                     html.Div([
-                        dbc.Row([
-                            dbc.Col([
-                                dbc.Label('Scenario Name *', className='fw-bold'),
-                                dbc.Input(
-                                    id='forecast-scenario-name',
-                                    type='text',
-                                    placeholder='e.g., Base Case 2024',
-                                    className='mb-3'
-                                )
-                            ], width=12)
-                        ]),
+                        html.Div('Sector / Category', style={'width': '20%', 'fontWeight': '600', 'padding': '0.75rem'}),
+                        html.Div('Forecasting Models', style={'width': '25%', 'fontWeight': '600', 'padding': '0.75rem'}),
+                        html.Div('MLR Input Parameters', style={'width': '40%', 'fontWeight': '600', 'padding': '0.75rem'}),
+                        html.Div('Years for WAM', style={'width': '15%', 'fontWeight': '600', 'padding': '0.75rem'})
+                    ], style={
+                        'display': 'flex',
+                        'backgroundColor': '#e2e8f0',
+                        'borderBottom': '2px solid #cbd5e1',
+                        'borderRadius': '0.375rem 0.375rem 0 0'
+                    }),
 
-                        dbc.Row([
-                            dbc.Col([
-                                dbc.Label('Base Year *', className='fw-bold'),
-                                dbc.Input(
-                                    id='forecast-base-year',
-                                    type='number',
-                                    placeholder='e.g., 2023',
-                                    min=2000,
-                                    max=2100,
-                                    className='mb-3'
-                                )
-                            ], width=6),
-                            dbc.Col([
-                                dbc.Label('Target Year *', className='fw-bold'),
-                                dbc.Input(
-                                    id='forecast-target-year',
-                                    type='number',
-                                    placeholder='e.g., 2050',
-                                    min=2000,
-                                    max=2100,
-                                    className='mb-3'
-                                )
-                            ], width=6)
-                        ]),
-
-                        dbc.Row([
-                            dbc.Col([
-                                dbc.Label('Forecasting Models', className='fw-bold mb-2'),
-                                dbc.Checklist(
-                                    id='forecast-models',
-                                    options=[
-                                        {'label': ' Simple Linear Regression (SLR)', 'value': 'SLR'},
-                                        {'label': ' Multiple Linear Regression (MLR)', 'value': 'MLR'},
-                                        {'label': ' Weighted Average Method (WAM)', 'value': 'WAM'},
-                                        {'label': ' Time Series Analysis', 'value': 'TimeSeries'}
-                                    ],
-                                    value=['SLR', 'MLR'],
-                                    className='mb-3'
-                                )
-                            ], width=12)
-                        ]),
-
-                        dbc.Row([
-                            dbc.Col([
-                                dbc.Label('Sectors to Forecast', className='fw-bold mb-2'),
-                                dbc.Checklist(
-                                    id='forecast-sectors',
-                                    options=[{'label': f' {sector}', 'value': idx}
-                                            for idx, sector in enumerate(sectors)],
-                                    value=list(range(len(sectors))),  # All selected by default
-                                    className='mb-3'
-                                )
-                            ], width=12)
-                        ])
-                    ], className='p-3')
-                ], label='⚙️ Basic Configuration', tab_id='basic'),
-
-                # T&D Losses Tab
-                dbc.Tab([
+                    # Table rows - one per sector
                     html.Div([
-                        dbc.Alert([
-                            html.H6('Transmission & Distribution Losses', className='alert-heading'),
-                            html.P('Configure T&D loss percentages for each sector. These losses will be factored into the final demand calculations.')
-                        ], color='info', className='mb-3'),
-
                         html.Div([
-                            dbc.Row([
-                                dbc.Col([
-                                    dbc.Label(sector, className='fw-bold'),
-                                    dbc.InputGroup([
-                                        dbc.Input(
-                                            id={'type': 'td-loss', 'sector': idx},
-                                            type='number',
-                                            value=5.0,
-                                            min=0,
-                                            max=100,
-                                            step=0.1
-                                        ),
-                                        dbc.InputGroupText('%')
-                                    ], className='mb-3')
-                                ], width=6)
-                            ]) for idx, sector in enumerate(sectors)
-                        ])
-                    ], className='p-3')
-                ], label='⚡ T&D Losses', tab_id='td_losses'),
+                            # Column 1: Sector Name
+                            html.Div(
+                                sector,
+                                style={'width': '20%', 'padding': '0.75rem', 'fontWeight': '500'}
+                            ),
 
-                # Advanced Options Tab
-                dbc.Tab([
-                    html.Div([
-                        dbc.Row([
-                            dbc.Col([
-                                dbc.Label('Confidence Interval', className='fw-bold'),
-                                dcc.Slider(
-                                    id='forecast-confidence',
-                                    min=80,
-                                    max=99,
-                                    step=1,
-                                    value=95,
-                                    marks={80: '80%', 85: '85%', 90: '90%', 95: '95%', 99: '99%'},
-                                    className='mb-4'
-                                )
-                            ], width=12)
-                        ]),
-
-                        dbc.Row([
-                            dbc.Col([
-                                dbc.Label('Data Validation', className='fw-bold'),
+                            # Column 2: Forecasting Models (multi-select)
+                            html.Div([
                                 dbc.Checklist(
-                                    id='forecast-validation-options',
+                                    id={'type': 'sector-models', 'sector': idx},
                                     options=[
-                                        {'label': ' Remove outliers', 'value': 'remove_outliers'},
-                                        {'label': ' Interpolate missing values', 'value': 'interpolate'},
-                                        {'label': ' Apply seasonal adjustments', 'value': 'seasonal'}
+                                        {'label': 'SLR', 'value': 'SLR'},
+                                        {'label': 'MLR', 'value': 'MLR'},
+                                        {'label': 'WAM', 'value': 'WAM'}
                                     ],
-                                    value=['interpolate'],
-                                    className='mb-3'
+                                    value=['SLR', 'MLR', 'WAM'],  # Default: All selected
+                                    inline=True,
+                                    className='mb-0'
                                 )
-                            ], width=12)
-                        ]),
+                            ], style={'width': '25%', 'padding': '0.75rem'}),
 
-                        dbc.Row([
-                            dbc.Col([
-                                dbc.Label('Output Options', className='fw-bold'),
-                                dbc.Checklist(
-                                    id='forecast-output-options',
+                            # Column 3: MLR Parameters (conditional dropdown)
+                            html.Div(
+                                dcc.Dropdown(
+                                    id={'type': 'mlr-params', 'sector': idx},
                                     options=[
-                                        {'label': ' Generate detailed report', 'value': 'report'},
-                                        {'label': ' Export to Excel', 'value': 'excel'},
-                                        {'label': ' Save visualization charts', 'value': 'charts'}
+                                        {'label': 'GDP', 'value': 'GDP'},
+                                        {'label': 'Population', 'value': 'Population'},
+                                        {'label': 'Income', 'value': 'Income'}
                                     ],
-                                    value=['report'],
-                                    className='mb-3'
-                                )
-                            ], width=12)
-                        ])
-                    ], className='p-3')
-                ], label='🔧 Advanced Options', tab_id='advanced')
-            ], id='configure-tabs', active_tab='basic')
-        ])
+                                    multi=True,
+                                    placeholder='Select parameters...',
+                                    style={'fontSize': '0.875rem'}
+                                ),
+                                style={'width': '40%', 'padding': '0.75rem'},
+                                id={'type': 'mlr-params-container', 'sector': idx}
+                            ),
+
+                            # Column 4: WAM Years (conditional select)
+                            html.Div(
+                                dcc.Dropdown(
+                                    id={'type': 'wam-years', 'sector': idx},
+                                    options=[{'label': str(i), 'value': i} for i in range(3, 11)],
+                                    value=3,
+                                    clearable=False,
+                                    style={'fontSize': '0.875rem', 'width': '80px'}
+                                ),
+                                style={'width': '15%', 'padding': '0.75rem'},
+                                id={'type': 'wam-years-container', 'sector': idx}
+                            )
+                        ], style={
+                            'display': 'flex',
+                            'alignItems': 'center',
+                            'borderBottom': '1px solid #e2e8f0',
+                            'backgroundColor': '#ffffff' if idx % 2 == 0 else '#f8fafc'
+                        })
+                        for idx, sector in enumerate(sectors)
+                    ])
+                ], style={
+                    'border': '1px solid #e2e8f0',
+                    'borderRadius': '0.375rem',
+                    'overflow': 'hidden'
+                })
+            ], className='p-3')
+        ], style={'maxHeight': '65vh', 'overflowY': 'auto'})
 
         return True, modal_content
 
@@ -1042,37 +1214,59 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
     Output('forecast-progress-interval', 'disabled', allow_duplicate=True),
     Input('start-forecast-btn', 'n_clicks'),
     State('forecast-scenario-name', 'value'),
-    State('forecast-base-year', 'value'),
     State('forecast-target-year', 'value'),
-    State('forecast-models', 'value'),
-    State('forecast-sectors', 'value'),
-    State({'type': 'td-loss', 'sector': ALL}, 'value'),
+    State('forecast-exclude-covid', 'value'),
+    State({'type': 'sector-models', 'sector': ALL}, 'value'),
+    State({'type': 'mlr-params', 'sector': ALL}, 'value'),
+    State({'type': 'wam-years', 'sector': ALL}, 'value'),
     State('active-project-store', 'data'),
     State('sectors-store', 'data'),
     prevent_initial_call=True
 )
-def start_forecasting(n_clicks, scenario_name, base_year, target_year, models,
-                     selected_sectors, td_losses, active_project, sectors):
-    """Start forecasting process and open progress modal"""
+def start_forecasting(n_clicks, scenario_name, target_year, exclude_covid,
+                     sector_models_list, mlr_params_list, wam_years_list,
+                     active_project, sectors):
+    """Start forecasting process with React-matched configuration"""
     if not n_clicks:
         return no_update, no_update, no_update
 
     # Validation
-    if not scenario_name or not base_year or not target_year:
-        return no_update, no_update, no_update
-
-    if not models or not selected_sectors:
+    if not scenario_name or not target_year:
         return no_update, no_update, no_update
 
     try:
-        # Prepare forecast configuration
+        # Prepare sector configurations
+        sector_configs = []
+        for idx, sector in enumerate(sectors):
+            models = sector_models_list[idx] if idx < len(sector_models_list) else ['SLR', 'MLR', 'WAM']
+            mlr_params = mlr_params_list[idx] if idx < len(mlr_params_list) else []
+            wam_years = wam_years_list[idx] if idx < len(wam_years_list) else 3
+
+            if models:  # Only include sectors with at least one model selected
+                sector_config = {
+                    'name': sector,
+                    'models': models
+                }
+
+                # Add MLR parameters if MLR is selected
+                if 'MLR' in models and mlr_params:
+                    sector_config['mlr_parameters'] = mlr_params
+
+                # Add WAM window if WAM is selected
+                if 'WAM' in models:
+                    sector_config['wam_window'] = wam_years
+
+                sector_configs.append(sector_config)
+
+        if not sector_configs:
+            return no_update, no_update, no_update
+
+        # Prepare forecast configuration matching React structure
         forecast_config = {
-            'scenario_name': scenario_name,
-            'base_year': int(base_year),
+            'scenario_name': scenario_name.strip(),
             'target_year': int(target_year),
-            'models': models,
-            'sectors': [sectors[idx] for idx in selected_sectors],
-            'td_losses': {sectors[idx]: td_losses[idx] for idx in selected_sectors}
+            'exclude_covid_years': 'exclude_covid' in (exclude_covid or []),
+            'sectors': sector_configs
         }
 
         # Start forecast via API
@@ -1084,16 +1278,18 @@ def start_forecasting(n_clicks, scenario_name, base_year, target_year, models,
         # Store process ID for tracking
         process_state = {
             'process_id': response.get('process_id'),
-            'status': 'running',
-            'progress': 0,
-            'current_task': 'Initializing forecast...'
+            'status': 'completed' if response.get('success') else 'failed',
+            'progress': 100 if response.get('success') else 0,
+            'current_task': response.get('message', 'Forecast completed')
         }
 
         # Open progress modal and enable interval for polling
-        return True, process_state, False
+        return True, process_state, True  # Disable interval since it's complete
 
     except Exception as e:
         print(f"Error starting forecast: {e}")
+        import traceback
+        traceback.print_exc()
         return no_update, no_update, no_update
 
 

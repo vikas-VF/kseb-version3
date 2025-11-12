@@ -169,12 +169,12 @@ SIDEBAR_STYLE = {
     "left": 0,
     "bottom": 0,
     "width": "288px",
-    "background-color": "#0f172a",
+    "backgroundColor": "#0f172a",
     "padding": "1rem",
-    "overflow-y": "auto",
+    "overflowY": "auto",
     "transition": "all 0.3s",
-    "border-right": "1px solid rgba(71, 85, 105, 0.5)",
-    "z-index": 30
+    "borderRight": "1px solid rgba(71, 85, 105, 0.5)",
+    "zIndex": 30
 }
 
 SIDEBAR_COLLAPSED_STYLE = {
@@ -188,28 +188,28 @@ TOPBAR_STYLE = {
     "left": 0,
     "right": 0,
     "height": "64px",
-    "background-color": "#1e293b",
-    "border-bottom": "1px solid #334155",
+    "backgroundColor": "#1e293b",
+    "borderBottom": "1px solid #334155",
     "padding": "0 1.5rem",
     "display": "flex",
-    "align-items": "center",
-    "justify-content": "space-between",
-    "z-index": 40
+    "alignItems": "center",
+    "justifyContent": "space-between",
+    "zIndex": 40
 }
 
 CONTENT_STYLE = {
-    "margin-left": "288px",
-    "margin-right": "80px",
-    "margin-top": "64px",
+    "marginLeft": "288px",
+    "marginRight": "80px",
+    "marginTop": "64px",
     "padding": "2rem",
-    "min-height": "calc(100vh - 64px)",
-    "background-color": "#f8fafc",
+    "minHeight": "calc(100vh - 64px)",
+    "backgroundColor": "#f8fafc",
     "transition": "margin-left 0.3s"
 }
 
 CONTENT_COLLAPSED_STYLE = {
     **CONTENT_STYLE,
-    "margin-left": "80px"
+    "marginLeft": "80px"
 }
 
 WORKFLOW_STYLE = {
@@ -218,9 +218,9 @@ WORKFLOW_STYLE = {
     "right": 0,
     "bottom": 0,
     "width": "80px",
-    "background-color": "#1e293b",
-    "border-left": "1px solid rgba(71, 85, 105, 0.5)",
-    "z-index": 20,
+    "backgroundColor": "#1e293b",
+    "borderLeft": "1px solid rgba(71, 85, 105, 0.5)",
+    "zIndex": 20,
     "padding": "1rem 0.5rem"
 }
 
@@ -271,12 +271,12 @@ app.layout = html.Div([
         'position': 'fixed',
         'top': '80px',
         'right': '20px',
-        'z-index': 9999
+        'zIndex': 9999
     })
 ], style={
-    'font-family': 'system-ui, -apple-system, sans-serif',
-    'min-height': '100vh',
-    'background-color': '#f8fafc'
+    'fontFamily': 'system-ui, -apple-system, sans-serif',
+    'minHeight': '100vh',
+    'backgroundColor': '#f8fafc'
 })
 
 # ============================================================================
