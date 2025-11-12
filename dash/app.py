@@ -28,7 +28,7 @@ from pages import home, create_project, load_project
 from pages import demand_projection, demand_visualization
 from pages import generate_profiles, analyze_profiles
 from pages import model_config, view_results
-from pages import settings_page
+from pages import settings_page, other_tools
 
 # Import callbacks
 from callbacks import project_callbacks, forecast_callbacks, profile_callbacks, pypsa_callbacks, settings_callbacks
@@ -235,6 +235,8 @@ def render_page_content(selected_page, active_project, collapsed):
         return view_results.layout(active_project), style
     elif selected_page == 'Settings':
         return settings_page.layout(), style
+    elif selected_page == 'Other Tools':
+        return other_tools.layout(), style
     else:
         return html.Div([
             html.H2("Page Not Found", className="text-2xl font-bold text-gray-800"),

@@ -12,7 +12,8 @@ from . import (
     analyze_profiles,
     model_config,
     view_results,
-    settings_page
+    settings_page,
+    other_tools
 )
 
 __all__ = [
@@ -25,5 +26,6 @@ __all__ = [
     'analyze_profiles',
     'model_config',
     'view_results',
-    'settings_page'
+    'settings_page',
+    'other_tools'
 ]
