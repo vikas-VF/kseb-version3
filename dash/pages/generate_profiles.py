@@ -873,10 +873,11 @@ def update_floating_indicator(process_state):
         return {'display': 'none'}, None
 
 
-# Close modal button
+# Close modal button with AUTO-NAVIGATION (React parity)
 @callback(
     Output('generate-progress-modal', 'is_open', allow_duplicate=True),
     Output('generation-process-state', 'data', allow_duplicate=True),
+    Output('selected-page-store', 'data', allow_duplicate=True),
     Input('close-generate-modal-btn', 'n_clicks'),
     State('generation-process-state', 'data'),
     State('url', 'pathname'),
@@ -884,9 +885,9 @@ def update_floating_indicator(process_state):
 )
 def close_modal_and_navigate(n_clicks, process_state, current_path):
     if not n_clicks:
-        return no_update, no_update
+        return no_update, no_update, no_update
 
-    # If completed, navigate to analyze page
+    # If completed, navigate to analyze page (AUTO-NAVIGATION)
     if process_state.get('status') == 'completed':
         # Reset process state
         process_state = {
@@ -899,9 +900,9 @@ def close_modal_and_navigate(n_clicks, process_state, current_path):
             'modalVisible': False,
             'modalMinimized': False
         }
-        # TODO: Trigger navigation to analyze page
-        return False, process_state
+        # Navigate to Analyze Profiles page ✅
+        return False, process_state, 'Analyze Profiles'
 
     # Otherwise just close
     process_state['modalVisible'] = False
-    return False, process_state
+    return False, process_state, no_update
