@@ -20,8 +20,7 @@ import dash_bootstrap_components as dbc
 from dash.exceptions import PreventUpdate
 import json
 
-# Register page
-dash.register_page(__name__, path='/pypsa/model-config', title='PyPSA Model Configuration')
+# Note: This page uses manual routing in app.py, not dash.register_page()
 
 # Constants
 DEFAULT_SCENARIO_NAME = 'PyPSA_Scenario_V1'

@@ -26,8 +26,7 @@ import plotly.graph_objects as go
 import json
 import pandas as pd
 
-# Register page
-dash.register_page(__name__, path='/pypsa/view-results', title='PyPSA View Results')
+# Note: This page uses manual routing in app.py, not dash.register_page()
 
 # Constants
 PYPSA_COLORS = {
