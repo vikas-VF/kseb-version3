@@ -338,58 +338,70 @@ def render_sector_data_view(state, sectors):
 
 
 def render_td_losses_view(state, sectors):
-    """Render T&D Losses tab content with controls and chart"""
-
-    if not sectors:
-        return dbc.Alert('No sectors available for this scenario.', color='info')
-
-    selected_sector = state.get('selectedSector') or (sectors[0] if sectors else None)
+    """
+    Render T&D Losses tab content - TIME-VARYING POINTS
+    Matches React TDLossesTab.jsx exactly
+    """
 
     return dbc.Container([
-        # Info Alert
-        dbc.Alert([
-            html.H6('Transmission & Distribution Losses', className='alert-heading mb-2'),
-            html.P('Configure T&D loss percentages for each sector. These losses represent energy lost during electricity transmission and distribution.', className='mb-0', style={'fontSize': '0.875rem'})
-        ], color='info', className='mb-3'),
+        # Hidden store for loss points
+        dcc.Store(id='viz-td-loss-points', data=[]),
 
-        # Controls Row
         dbc.Row([
+            # LEFT COLUMN: Configuration
             dbc.Col([
-                dbc.Label('Sector:', className='fw-bold mb-1'),
-                dcc.Dropdown(
-                    id='viz-td-sector-selector',
-                    options=[{'label': s, 'value': s} for s in sectors],
-                    value=selected_sector,
-                    clearable=False
-                )
-            ], width=6),
-            dbc.Col([
-                dbc.Label('T&D Loss (%):', className='fw-bold mb-1'),
-                dbc.Input(
-                    id='viz-td-loss-input',
-                    type='number',
-                    min=0,
-                    max=100,
-                    step=0.1,
-                    placeholder='Enter loss percentage'
-                )
-            ], width=3),
-            dbc.Col([
-                dbc.Label(html.Span('\u00A0'), className='mb-1'),
-                dbc.Button(
-                    [html.I(className='bi bi-save me-2'), 'Save'],
-                    id='viz-save-td-losses-btn',
-                    color='success',
-                    className='w-100'
-                )
-            ], width=3)
-        ], className='mb-3'),
+                dbc.Card([
+                    dbc.CardHeader([
+                        html.Div([
+                            html.H5([
+                                html.I(className='bi bi-gear-fill me-2', style={'color': '#4F46E5'}),
+                                'T&D Losses Configuration'
+                            ], className='mb-0')
+                        ], style={'flex': '1'}),
+                        dbc.Button(
+                            [html.I(className='bi bi-save me-2'), html.Span('Save', id='viz-td-save-text')],
+                            id='viz-save-td-btn',
+                            color='success',
+                            size='sm'
+                        )
+                    ], style={'display': 'flex', 'alignItems': 'center', 'justifyContent': 'space-between'}),
+                    dbc.CardBody([
+                        # Loss points list
+                        html.Div(id='viz-td-points-list', style={
+                            'maxHeight': '400px',
+                            'overflowY': 'auto',
+                            'backgroundColor': '#F8FAFC',
+                            'borderRadius': '8px',
+                            'padding': '8px'
+                        }),
 
-        # Chart
-        html.Div(id='viz-td-losses-chart'),
+                        # Add point button
+                        dbc.Button(
+                            [html.I(className='bi bi-plus-circle me-2'), 'Add Data Point'],
+                            id='viz-add-td-point-btn',
+                            color='primary',
+                            outline=True,
+                            className='w-100 mt-2'
+                        )
+                    ])
+                ])
+            ], md=6),
 
-        # Save status
-        html.Div(id='viz-td-save-status')
+            # RIGHT COLUMN: Preview Chart
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardHeader([
+                        html.H5([
+                            html.I(className='bi bi-bar-chart-fill me-2', style={'color': '#4F46E5'}),
+                            'Preview'
+                        ], className='mb-0')
+                    ]),
+                    dbc.CardBody([
+                        html.Div(id='viz-td-preview-chart')
+                    ])
+                ])
+            ], md=6)
+        ])
     ], fluid=True)
 
 

@@ -945,39 +945,47 @@ class LocalService:
     # ==================== T&D LOSSES ====================
 
     def get_td_losses(self, project_path: str, scenario_name: str) -> Dict:
-        """Get T&D loss configuration"""
+        """
+        Get T&D loss configuration (time-varying points)
+        Matches React backend structure: [{year: X, loss: Y}, ...]
+        """
         try:
             scenario_dir = os.path.join(project_path, 'results', 'demand_forecasts', scenario_name)
-            meta_file = os.path.join(scenario_dir, 'metadata.json')
+            td_losses_file = os.path.join(scenario_dir, 'td_losses.json')
 
-            if os.path.exists(meta_file):
-                with open(meta_file, 'r') as f:
-                    metadata = json.load(f)
-                return {'td_losses': metadata.get('td_losses', {})}
+            if os.path.exists(td_losses_file):
+                with open(td_losses_file, 'r') as f:
+                    loss_points = json.load(f)
+                return {'success': True, 'data': loss_points}
 
-            return {'td_losses': {}}
+            # Default: single point at current year with 15% loss
+            from datetime import datetime
+            return {'success': True, 'data': [{'year': datetime.now().year, 'loss': 15}]}
 
         except Exception as e:
             logger.error(f"Error getting T&D losses: {e}")
-            return {'td_losses': {}}
+            from datetime import datetime
+            return {'success': True, 'data': [{'year': datetime.now().year, 'loss': 15}]}
 
-    def save_td_losses(self, project_path: str, scenario_name: str, losses: Dict) -> Dict:
-        """Save T&D loss configuration"""
+    def save_td_losses(self, project_path: str, scenario_name: str, loss_points: list) -> Dict:
+        """
+        Save T&D loss configuration (time-varying points)
+        Args:
+            loss_points: List of {year: int, loss: float} dicts
+        """
         try:
             scenario_dir = os.path.join(project_path, 'results', 'demand_forecasts', scenario_name)
-            meta_file = os.path.join(scenario_dir, 'metadata.json')
+            os.makedirs(scenario_dir, exist_ok=True)
 
-            metadata = {}
-            if os.path.exists(meta_file):
-                with open(meta_file, 'r') as f:
-                    metadata = json.load(f)
+            td_losses_file = os.path.join(scenario_dir, 'td_losses.json')
 
-            metadata['td_losses'] = losses
+            # Remove any 'id' fields that might exist from frontend
+            clean_points = [{'year': int(p['year']), 'loss': float(p['loss'])} for p in loss_points]
 
-            with open(meta_file, 'w') as f:
-                json.dump(metadata, f, indent=2)
+            with open(td_losses_file, 'w') as f:
+                json.dump(clean_points, f, indent=2)
 
-            return {'success': True}
+            return {'success': True, 'message': 'T&D losses saved successfully'}
 
         except Exception as e:
             logger.error(f"Error saving T&D losses: {e}")
