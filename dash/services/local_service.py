@@ -7,10 +7,150 @@ import os
 import json
 import pandas as pd
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 import logging
+import openpyxl
 
 logger = logging.getLogger(__name__)
+
+
+# ==================== EXCEL PROCESSING HELPER FUNCTIONS ====================
+
+def find_sheet(workbook, sheet_name: str):
+    """
+    Find a sheet by case-insensitive name.
+
+    Args:
+        workbook: openpyxl workbook object
+        sheet_name: Sheet name to find
+
+    Returns:
+        Worksheet if found, None otherwise
+    """
+    lower_case_name = sheet_name.lower()
+    for name in workbook.sheetnames:
+        if name.lower() == lower_case_name:
+            return workbook[name]
+    return None
+
+
+def find_cell_position(worksheet, marker: str) -> Optional[Tuple[int, int]]:
+    """
+    Find a marker cell (like '~Consumption_Sectors' or '~Econometric_Parameters').
+
+    Args:
+        worksheet: openpyxl worksheet
+        marker: Marker string to find (case-insensitive)
+
+    Returns:
+        Tuple of (row, col) if found, None otherwise
+    """
+    lower_marker = marker.lower()
+    for row_idx, row in enumerate(worksheet.iter_rows(values_only=True), start=1):
+        for col_idx, cell_value in enumerate(row, start=1):
+            if (isinstance(cell_value, str) and
+                cell_value.strip().lower() == lower_marker):
+                return (row_idx, col_idx)
+    return None
+
+
+def safe_float(value, default=0.0):
+    """
+    Safely convert value to float with fallback.
+
+    Args:
+        value: Value to convert
+        default: Default value if conversion fails
+
+    Returns:
+        Float value or default
+    """
+    try:
+        return float(value) if value is not None else default
+    except (ValueError, TypeError):
+        return default
+
+
+def safe_int(value, default=0):
+    """
+    Safely convert value to int with fallback.
+
+    Args:
+        value: Value to convert
+        default: Default value if conversion fails
+
+    Returns:
+        Integer value or default
+    """
+    try:
+        return int(float(value)) if value is not None else default
+    except (ValueError, TypeError):
+        return default
+
+
+def is_solar_sector(sector_name: str) -> bool:
+    """
+    Check if a sector name contains 'solar' or 'Solar'.
+
+    Args:
+        sector_name: Name of the sector
+
+    Returns:
+        True if sector is a solar generation sector
+    """
+    return 'solar' in sector_name.lower()
+
+
+def calculate_td_loss_percentage(target_year: int, loss_points: List[Dict]) -> float:
+    """
+    Calculate T&D loss percentage for a given year using linear interpolation.
+
+    Args:
+        target_year: Year to calculate loss for
+        loss_points: List of dicts with 'year' and 'loss' keys
+
+    Returns:
+        Loss percentage as decimal (e.g., 0.10 for 10%)
+    """
+    DEFAULT_LOSS = 0.10  # 10%
+
+    if not loss_points or len(loss_points) == 0:
+        return DEFAULT_LOSS
+
+    # Filter and sort points
+    sorted_points = sorted(
+        [p for p in loss_points if isinstance(p.get('year'), (int, float)) and isinstance(p.get('loss'), (int, float))],
+        key=lambda p: p['year']
+    )
+
+    if len(sorted_points) == 0:
+        return DEFAULT_LOSS
+    if len(sorted_points) == 1:
+        return sorted_points[0]['loss'] / 100
+
+    first_point = sorted_points[0]
+    last_point = sorted_points[-1]
+
+    # Extrapolation
+    if target_year <= first_point['year']:
+        return first_point['loss'] / 100
+    if target_year >= last_point['year']:
+        return last_point['loss'] / 100
+
+    # Interpolation
+    for i in range(len(sorted_points) - 1):
+        p1 = sorted_points[i]
+        p2 = sorted_points[i + 1]
+
+        if target_year >= p1['year'] and target_year <= p2['year']:
+            if p2['year'] - p1['year'] == 0:
+                return p1['loss'] / 100
+
+            # Linear interpolation
+            interpolated_loss = p1['loss'] + (target_year - p1['year']) * (p2['loss'] - p1['loss']) / (p2['year'] - p1['year'])
+            return interpolated_loss / 100
+
+    return DEFAULT_LOSS
 
 
 class LocalService:
@@ -78,23 +218,73 @@ class LocalService:
     # ==================== SECTORS ====================
 
     def get_sectors(self, project_path: str) -> Dict:
-        """Get consumption sectors from Excel file"""
-        try:
-            # Look for input Excel file
-            inputs_dir = os.path.join(project_path, 'inputs')
-            excel_files = [f for f in os.listdir(inputs_dir) if f.endswith('.xlsx') or f.endswith('.xls')]
+        """
+        Get consumption sectors from Excel file using ~consumption_sectors marker.
 
-            if not excel_files:
+        Reads the 'main' sheet and looks for the '~consumption_sectors' marker,
+        then extracts all sector names listed below it (matching FastAPI logic).
+        """
+        try:
+            # Look for input demand Excel file
+            inputs_dir = os.path.join(project_path, 'inputs')
+            excel_path = os.path.join(inputs_dir, 'input_demand_file.xlsx')
+
+            if not os.path.exists(excel_path):
+                logger.warning(f"input_demand_file.xlsx not found, using default sectors")
                 return {'sectors': ['Residential', 'Commercial', 'Industrial', 'Agriculture', 'Public Lighting']}
 
-            # Read first Excel file to get sectors
-            excel_path = os.path.join(inputs_dir, excel_files[0])
-            xls = pd.ExcelFile(excel_path)
+            # Load workbook with openpyxl
+            workbook = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
 
-            # Filter out sheets that are sectors (exclude metadata sheets)
-            sectors = [sheet for sheet in xls.sheet_names
-                      if sheet not in ['Metadata', 'Info', 'Config', 'Summary']]
+            # Find 'main' sheet (case-insensitive)
+            main_sheet = find_sheet(workbook, 'main')
 
+            if not main_sheet:
+                logger.warning("Sheet 'main' not found, using sheet-based sector detection")
+                workbook.close()
+                # Fallback to sheet names
+                xls = pd.ExcelFile(excel_path)
+                sectors = [sheet for sheet in xls.sheet_names
+                          if sheet.lower() not in ['main', 'metadata', 'info', 'config', 'summary', 'economic_indicators']]
+                return {'sectors': sectors}
+
+            # Convert to list of rows
+            rows = list(main_sheet.iter_rows(values_only=True))
+
+            sectors = []
+            start_index = -1
+
+            # Find the marker '~consumption_sectors' (case-insensitive)
+            for i, row in enumerate(rows):
+                for cell_value in row:
+                    if (isinstance(cell_value, str) and
+                        cell_value.strip().lower() == '~consumption_sectors'):
+                        start_index = i + 2  # Start reading 2 rows below the marker
+                        break
+                if start_index != -1:
+                    break
+
+            # Extract sectors starting from the marker
+            if start_index != -1:
+                for i in range(start_index, len(rows)):
+                    cell = rows[i][0]  # First column
+                    if not cell or str(cell).strip() == '':
+                        break  # Stop at first empty cell
+
+                    # Strip the "~" prefix if present
+                    sector_name = str(cell).strip()
+                    if sector_name.startswith('~'):
+                        sector_name = sector_name[1:].strip()
+
+                    sectors.append(sector_name)
+
+            workbook.close()
+
+            if not sectors:
+                logger.warning("No sectors found under ~consumption_sectors marker, using defaults")
+                return {'sectors': ['Residential', 'Commercial', 'Industrial', 'Agriculture', 'Public Lighting']}
+
+            logger.info(f"Found {len(sectors)} sectors: {sectors}")
             return {'sectors': sectors}
 
         except Exception as e:
@@ -105,70 +295,345 @@ class LocalService:
     # ==================== EXCEL PARSING ====================
 
     def extract_sector_data(self, project_path: str, sector: str) -> Dict:
-        """Extract sector data from Excel"""
+        """
+        Extract sector-specific data merged with economic indicators.
+
+        Process (matching FastAPI logic):
+        1. Read econometric parameters for the sector from 'main' sheet using ~Econometric_Parameters marker
+        2. Extract Year and Electricity data from sector-specific sheet
+        3. Merge with economic indicator values from 'Economic_Indicators' sheet
+        """
         try:
             inputs_dir = os.path.join(project_path, 'inputs')
-            excel_files = [f for f in os.listdir(inputs_dir) if f.endswith('.xlsx')]
+            excel_path = os.path.join(inputs_dir, 'input_demand_file.xlsx')
 
-            if not excel_files:
-                return {'success': False, 'error': 'No Excel file found'}
+            if not os.path.exists(excel_path):
+                return {'success': False, 'error': 'input_demand_file.xlsx not found'}
 
-            excel_path = os.path.join(inputs_dir, excel_files[0])
-            df = pd.read_excel(excel_path, sheet_name=sector)
+            # Load workbook with openpyxl
+            workbook = openpyxl.load_workbook(excel_path, data_only=True)
+
+            # Find sheets (case-insensitive)
+            main_sheet = find_sheet(workbook, 'main')
+            econ_sheet = find_sheet(workbook, 'Economic_Indicators')
+
+            if not main_sheet:
+                logger.warning("Sheet 'main' not found, returning sector data only")
+                # Fallback to simple sector reading
+                df = pd.read_excel(excel_path, sheet_name=sector)
+                workbook.close()
+                return {
+                    'success': True,
+                    'data': df.to_dict('records'),
+                    'columns': df.columns.tolist()
+                }
+
+            if not econ_sheet:
+                logger.warning("Sheet 'Economic_Indicators' not found, returning sector data only")
+                # Fallback to simple sector reading
+                df = pd.read_excel(excel_path, sheet_name=sector)
+                workbook.close()
+                return {
+                    'success': True,
+                    'data': df.to_dict('records'),
+                    'columns': df.columns.tolist()
+                }
+
+            # 1. Get sector-specific economic parameters from Main sheet
+            econ_param_marker = find_cell_position(main_sheet, '~Econometric_Parameters')
+
+            if not econ_param_marker:
+                logger.warning("Marker '~Econometric_Parameters' not found, returning sector data only")
+                # Fallback to simple sector reading
+                df = pd.read_excel(excel_path, sheet_name=sector)
+                workbook.close()
+                return {
+                    'success': True,
+                    'data': df.to_dict('records'),
+                    'columns': df.columns.tolist()
+                }
+
+            marker_row, marker_col = econ_param_marker
+            headers_row = marker_row + 1
+
+            # Find the sector column
+            sector_column = None
+            max_col = main_sheet.max_column
+
+            for col in range(marker_col, max_col + 1):
+                cell_value = main_sheet.cell(row=headers_row, column=col).value
+                if cell_value and str(cell_value).strip().lower() == sector.strip().lower():
+                    sector_column = col
+                    break
+
+            if sector_column is None:
+                logger.warning(f"Sector column '{sector}' not found under econometric parameters, returning sector data only")
+                # Fallback to simple sector reading
+                df = pd.read_excel(excel_path, sheet_name=sector)
+                workbook.close()
+                return {
+                    'success': True,
+                    'data': df.to_dict('records'),
+                    'columns': df.columns.tolist()
+                }
+
+            # 2. Extract economic indicator names below this column
+            indicators = []
+            for row in range(headers_row + 1, main_sheet.max_row + 1):
+                cell_value = main_sheet.cell(row=row, column=sector_column).value
+                if not cell_value or cell_value == '':
+                    break
+                indicators.append(str(cell_value))
+
+            # 3. Read sector sheet for Year & Electricity
+            sector_sheet = find_sheet(workbook, sector)
+            if not sector_sheet:
+                workbook.close()
+                return {'success': False, 'error': f"Sector sheet for '{sector}' not found"}
+
+            # Convert sector sheet to list of dicts
+            sector_data = []
+            headers = [cell.value for cell in next(sector_sheet.iter_rows(min_row=1, max_row=1))]
+            for row in sector_sheet.iter_rows(min_row=2, values_only=True):
+                if len(row) > 0 and row[0] is not None:  # Skip empty rows
+                    row_dict = dict(zip(headers, row))
+                    sector_data.append(row_dict)
+
+            # 4. Collect economic values from Economic_Indicators sheet
+            econ_data = []
+            econ_headers = [cell.value for cell in next(econ_sheet.iter_rows(min_row=1, max_row=1))]
+            for row in econ_sheet.iter_rows(min_row=2, values_only=True):
+                if len(row) > 0 and row[0] is not None:  # Skip empty rows
+                    row_dict = dict(zip(econ_headers, row))
+                    econ_data.append(row_dict)
+
+            # 5. Merge data (case-insensitive column matching)
+            merged = []
+            for sector_row in sector_data:
+                # Case-insensitive Year and Electricity extraction
+                year = sector_row.get('Year') or sector_row.get('year')
+                electricity = sector_row.get('Electricity') or sector_row.get('electricity')
+
+                if year is None:
+                    continue
+
+                # Find matching economic data for this year
+                econ_row = next(
+                    (e for e in econ_data if (e.get('Year') or e.get('year')) == year),
+                    {}
+                )
+
+                obj = {"Year": year, "Electricity": electricity}
+                for key in indicators:
+                    obj[key] = econ_row.get(key, None)
+
+                merged.append(obj)
+
+            workbook.close()
+
+            if not merged:
+                logger.warning(f"No merged data for sector {sector}")
+                return {'success': False, 'error': 'No data found'}
 
             return {
                 'success': True,
-                'data': df.to_dict('records'),
-                'columns': df.columns.tolist()
+                'data': merged,
+                'columns': list(merged[0].keys()) if merged else []
             }
 
         except Exception as e:
             logger.error(f"Error extracting sector data: {e}")
             return {'success': False, 'error': str(e)}
 
+    def read_solar_share_data(self, project_path: str) -> Dict[str, float]:
+        """
+        Read solar share percentages for each sector from input_demand_file.xlsx.
+
+        Looks for the ~Solar_share marker in the 'main' sheet and reads
+        Sector and Percentage_share columns below it.
+
+        Returns:
+            Dictionary mapping sector name to percentage share (e.g., {"Agriculture": 5.5})
+        """
+        try:
+            excel_path = os.path.join(project_path, 'inputs', 'input_demand_file.xlsx')
+
+            if not os.path.exists(excel_path):
+                logger.warning(f"input_demand_file.xlsx not found at: {excel_path}")
+                return {}
+
+            workbook = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
+
+            # Find 'main' sheet (case-insensitive)
+            main_sheet = find_sheet(workbook, 'main')
+
+            if not main_sheet:
+                logger.warning("Sheet 'main' not found")
+                workbook.close()
+                return {}
+
+            # Find ~Solar_share marker
+            marker_row = None
+            marker_col = None
+            for row_idx, row in enumerate(main_sheet.iter_rows(values_only=True), start=1):
+                for col_idx, cell_value in enumerate(row, start=1):
+                    if (isinstance(cell_value, str) and
+                        cell_value.strip().lower() == '~solar_share'):
+                        marker_row = row_idx
+                        marker_col = col_idx
+                        break
+                if marker_row:
+                    break
+
+            if not marker_row:
+                logger.info("Marker '~Solar_share' not found, returning empty dict")
+                workbook.close()
+                return {}
+
+            # Read header row (should be 1 or 2 rows below marker)
+            headers_row = marker_row + 1
+            headers = [main_sheet.cell(row=headers_row, column=col).value
+                      for col in range(1, main_sheet.max_column + 1)]
+
+            # If first row after marker is blank, try next row
+            if not any(headers):
+                headers_row = marker_row + 2
+                headers = [main_sheet.cell(row=headers_row, column=col).value
+                          for col in range(1, main_sheet.max_column + 1)]
+
+            # Find Sector and Percentage_share columns
+            sector_col = None
+            percentage_col = None
+
+            for col_idx, header in enumerate(headers, start=1):
+                if header:
+                    header_lower = str(header).strip().lower()
+                    if header_lower == 'sector':
+                        sector_col = col_idx
+                    elif 'percentage' in header_lower and 'share' in header_lower:
+                        percentage_col = col_idx
+
+            if not sector_col or not percentage_col:
+                logger.warning(f"Required columns not found. Sector col: {sector_col}, Percentage col: {percentage_col}")
+                workbook.close()
+                return {}
+
+            # Read data rows
+            solar_shares = {}
+            for row_idx in range(headers_row + 1, main_sheet.max_row + 1):
+                sector_name = main_sheet.cell(row=row_idx, column=sector_col).value
+                percentage_value = main_sheet.cell(row=row_idx, column=percentage_col).value
+
+                if not sector_name or sector_name == '':
+                    break  # Stop at first empty sector
+
+                try:
+                    percentage_float = float(percentage_value) if percentage_value else 0.0
+                    solar_shares[str(sector_name).strip()] = percentage_float
+                except (ValueError, TypeError):
+                    logger.warning(f"Invalid percentage value for sector {sector_name}: {percentage_value}")
+                    solar_shares[str(sector_name).strip()] = 0.0
+
+            workbook.close()
+            logger.info(f"Successfully loaded solar shares for {len(solar_shares)} sectors")
+            return solar_shares
+
+        except Exception as e:
+            logger.error(f"Error reading solar share data: {e}")
+            return {}
+
     # ==================== CONSOLIDATED VIEW ====================
 
     def get_consolidated_electricity(self, project_path: str, sectors: Optional[List[str]] = None) -> Dict:
-        """Get consolidated electricity data"""
+        """
+        Consolidate electricity consumption by sectors and years using openpyxl.
+
+        Reads all sheets from input_demand_file.xlsx that contain 'Year' and 'Electricity' columns,
+        then consolidates the data into a single table (matching FastAPI logic).
+        """
         try:
-            inputs_dir = os.path.join(project_path, 'inputs')
-            excel_files = [f for f in os.listdir(inputs_dir) if f.endswith('.xlsx')]
+            excel_path = os.path.join(project_path, 'inputs', 'input_demand_file.xlsx')
 
-            if not excel_files:
-                return {'success': False, 'error': 'No Excel file found'}
+            if not os.path.exists(excel_path):
+                return {'success': False, 'error': 'input_demand_file.xlsx not found'}
 
-            excel_path = os.path.join(inputs_dir, excel_files[0])
-
-            # Read all sectors and aggregate
+            # Get sectors if not provided
             if sectors is None:
                 sectors_response = self.get_sectors(project_path)
                 sectors = sectors_response.get('sectors', [])
 
-            consolidated_data = []
-            for sector in sectors:
-                try:
-                    df = pd.read_excel(excel_path, sheet_name=sector)
-                    if 'Year' in df.columns and 'Electricity' in df.columns:
-                        consolidated_data.append(df[['Year', 'Electricity']])
-                except:
+            # Load workbook
+            workbook = openpyxl.load_workbook(excel_path, data_only=True)
+
+            year_wise = {}
+            found_sectors = set()
+
+            # Iterate through all sector sheets
+            for sector_name in sectors:
+                sector_sheet = find_sheet(workbook, sector_name)
+
+                if not sector_sheet:
                     continue
 
-            if consolidated_data:
-                # Merge all sectors
-                result = consolidated_data[0].copy()
-                for df in consolidated_data[1:]:
-                    result = result.merge(df, on='Year', how='outer', suffixes=('', '_dup'))
+                # Convert sheet to list of dicts
+                headers = [cell.value for cell in next(sector_sheet.iter_rows(min_row=1, max_row=1))]
+                data = []
+                for row in sector_sheet.iter_rows(min_row=2, values_only=True):
+                    if len(row) > 0 and row[0] is not None:
+                        row_dict = dict(zip(headers, row))
+                        data.append(row_dict)
 
-                # Sum electricity columns
-                elec_cols = [col for col in result.columns if 'Electricity' in col]
-                result['Total_Electricity'] = result[elec_cols].sum(axis=1)
+                # Check if sheet has Year and Electricity columns (case-insensitive)
+                has_year = any(h and str(h).lower() == 'year' for h in headers)
+                has_electricity = any(h and str(h).lower() == 'electricity' for h in headers)
 
-                return {
-                    'success': True,
-                    'data': result[['Year', 'Total_Electricity']].to_dict('records')
-                }
+                if not has_year or not has_electricity:
+                    continue
 
-            return {'success': False, 'error': 'No valid data found'}
+                sector = sector_name.strip()
+                found_sectors.add(sector)
+
+                # Process each row
+                for row in data:
+                    # Case-insensitive column matching
+                    year = row.get('Year') or row.get('year')
+                    electricity = row.get('Electricity') or row.get('electricity')
+
+                    if not year or year == '':
+                        continue
+
+                    try:
+                        numeric_year = safe_int(year)
+                        if numeric_year == 0:
+                            continue
+                    except (ValueError, TypeError):
+                        continue
+
+                    if numeric_year not in year_wise:
+                        year_wise[numeric_year] = {"Year": numeric_year}
+
+                    year_wise[numeric_year][sector] = electricity
+
+            workbook.close()
+
+            # Maintain only valid sectors in the order received
+            ordered_sectors = [s for s in sectors if s in found_sectors]
+
+            # Format the output
+            formatted_array = []
+            for year in sorted(year_wise.keys()):
+                result_row = {"Year": year}
+                for sector in ordered_sectors:
+                    result_row[sector] = year_wise[year].get(sector, '')
+                formatted_array.append(result_row)
+
+            if not formatted_array:
+                return {'success': False, 'error': 'No valid data found'}
+
+            return {
+                'success': True,
+                'data': formatted_array
+            }
 
         except Exception as e:
             logger.error(f"Error getting consolidated data: {e}")
