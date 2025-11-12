@@ -245,7 +245,11 @@ def layout(active_project=None):
         dcc.Store(id='forecast-process-state', data=None),
 
         # Interval for SSE polling (alternative to EventSource)
-        dcc.Interval(id='forecast-progress-interval', interval=1000, disabled=True)
+        dcc.Interval(id='forecast-progress-interval', interval=1000, disabled=True),
+
+        # Hidden divs for callback outputs (referenced by forecast_callbacks.py)
+        html.Div(id='forecast-execution-status', style={'display': 'none'}),
+        html.Div(id='sectors-list-preview', style={'display': 'none'})
 
     ], fluid=True, style={'padding': '2rem'})
 
