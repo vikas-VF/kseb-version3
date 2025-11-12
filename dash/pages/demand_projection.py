@@ -80,78 +80,66 @@ def layout(active_project=None):
             style={'display': 'none'}
         ),
 
-        # Header
+        # COMPACT HEADER - React-style single-row layout
         html.Div([
+            # View Toggle (Compact inline buttons)
             html.Div([
-                html.H2(
-                    '📈 Demand Forecasting - Analysis & Configuration',
-                    style={'fontSize': '1.75rem', 'fontWeight': '700',
-                          'color': '#1e293b', 'marginBottom': '0.5rem'}
-                ),
-                html.P(
-                    f'Project: {active_project.get("name", "Unknown")}',
-                    style={'fontSize': '0.875rem', 'color': '#64748b', 'marginBottom': '0'}
-                )
-            ], style={'flex': '1'}),
-
-            html.Div([
-                dbc.Button(
-                    '⚙️ Configure Forecast',
-                    id='open-configure-forecast-btn',
-                    color='success',
-                    size='lg'
-                )
-            ])
-        ], style={'display': 'flex', 'alignItems': 'center', 'marginBottom': '1.5rem'}),
-
-        # View Toggle
-        dbc.Card([
-            dbc.CardBody([
                 dbc.ButtonGroup([
                     dbc.Button(
-                        [
-                            html.Span('📊 ', style={'marginRight': '0.5rem'}),
-                            'Consolidated View'
-                        ],
+                        [html.I(className='bi bi-bar-chart-fill me-1'), 'Consolidated View'],
                         id='consolidated-view-btn',
+                        size='sm',
                         color='primary',
                         outline=False,
-                        className='px-4'
+                        style={'fontSize': '0.875rem', 'fontWeight': '600'}
                     ),
                     dbc.Button(
-                        [
-                            html.Span('🎯 ', style={'marginRight': '0.5rem'}),
-                            'Sector-Specific View'
-                        ],
+                        [html.I(className='bi bi-sliders me-1'), 'Sector View'],
                         id='sector-view-btn',
+                        size='sm',
                         color='primary',
                         outline=True,
-                        className='px-4'
+                        style={'fontSize': '0.875rem', 'fontWeight': '600'}
                     )
-                ], size='lg', className='w-100')
-            ], className='p-2')
-        ], className='mb-3'),
+                ], style={'backgroundColor': 'rgba(226, 232, 240, 0.7)', 'padding': '0.125rem',
+                         'borderRadius': '0.375rem', 'border': '1px solid rgba(203, 213, 225, 0.5)'})
+            ], style={'marginRight': '1rem'}),
+
+            # Unit Selector (Compact inline)
+            html.Div([
+                html.Label('Unit', style={'fontSize': '0.875rem', 'fontWeight': '600',
+                                         'color': '#475569', 'marginRight': '0.5rem',
+                                         'marginBottom': '0'}),
+                dcc.Dropdown(
+                    id='consolidated-unit-selector',
+                    options=[
+                        {'label': 'kWh', 'value': 'kwh'},
+                        {'label': 'MWh', 'value': 'mwh'},
+                        {'label': 'GWh', 'value': 'gwh'},
+                        {'label': 'TWh', 'value': 'twh'}
+                    ],
+                    value='mwh',
+                    clearable=False,
+                    style={'width': '110px', 'fontSize': '0.875rem'}
+                )
+            ], style={'display': 'flex', 'alignItems': 'center', 'marginRight': '1rem'}),
+
+            # Configure Forecast Button (Compact)
+            dbc.Button(
+                [html.I(className='bi bi-gear-fill me-2'), 'Configure Forecast'],
+                id='open-configure-forecast-btn',
+                size='sm',
+                color='indigo',
+                style={'fontSize': '0.875rem', 'fontWeight': '600',
+                      'backgroundColor': '#4f46e5', 'border': 'none',
+                      'boxShadow': '0 1px 2px 0 rgba(0, 0, 0, 0.05)'}
+            )
+        ], style={'display': 'flex', 'justifyContent': 'center', 'alignItems': 'center',
+                 'marginBottom': '1rem', 'padding': '0.5rem',
+                 'backgroundColor': '#f8fafc', 'borderRadius': '0.5rem'}),
 
         # Consolidated View Content
         html.Div([
-            # Top controls row
-            dbc.Row([
-                dbc.Col([
-                    dbc.Label('Unit:', className='fw-bold me-2'),
-                    dcc.Dropdown(
-                        id='consolidated-unit-selector',
-                        options=[
-                            {'label': 'MWh', 'value': 'mwh'},
-                            {'label': 'kWh', 'value': 'kwh'},
-                            {'label': 'GWh', 'value': 'gwh'},
-                            {'label': 'TWh', 'value': 'twh'}
-                        ],
-                        value='mwh',
-                        clearable=False,
-                        style={'width': '150px'}
-                    )
-                ], width='auto')
-            ], className='mb-3'),
 
             # Tabs
             dbc.Tabs([
@@ -180,34 +168,44 @@ def layout(active_project=None):
 
         # Sector-Specific View Content
         html.Div([
-            # Sector selector and unit
-            dbc.Row([
-                dbc.Col([
-                    dbc.Label('Sector:', className='fw-bold me-2'),
-                    dcc.Dropdown(
-                        id='sector-selector',
-                        options=[],
-                        value=None,
-                        clearable=False,
-                        style={'width': '300px'}
-                    )
-                ], width='auto'),
-                dbc.Col([
-                    dbc.Label('Unit:', className='fw-bold me-2'),
-                    dcc.Dropdown(
-                        id='sector-unit-selector',
-                        options=[
-                            {'label': 'MWh', 'value': 'mwh'},
-                            {'label': 'kWh', 'value': 'kwh'},
-                            {'label': 'GWh', 'value': 'gwh'},
-                            {'label': 'TWh', 'value': 'twh'}
-                        ],
-                        value='mwh',
-                        clearable=False,
-                        style={'width': '150px'}
-                    )
-                ], width='auto')
-            ], className='mb-3'),
+            # Horizontal Scrollable Sector Pills (React-style)
+            html.Div([
+                html.Div(
+                    id='sector-pills-container',
+                    style={
+                        'overflowX': 'auto',
+                        'whiteSpace': 'nowrap',
+                        'padding': '0.5rem',
+                        'backgroundColor': '#ffffff',
+                        'borderRadius': '0.5rem',
+                        'border': '1px solid rgba(226, 232, 240, 0.8)',
+                        'boxShadow': '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+                        'marginBottom': '0.75rem'
+                    },
+                    children=[]  # Will be populated by callback
+                )
+            ]),
+
+            # Hidden dropdown for backward compatibility with callbacks
+            dcc.Dropdown(
+                id='sector-selector',
+                options=[],
+                value=None,
+                clearable=False,
+                style={'display': 'none'}
+            ),
+            dcc.Dropdown(
+                id='sector-unit-selector',
+                options=[
+                    {'label': 'MWh', 'value': 'mwh'},
+                    {'label': 'kWh', 'value': 'kwh'},
+                    {'label': 'GWh', 'value': 'gwh'},
+                    {'label': 'TWh', 'value': 'twh'}
+                ],
+                value='mwh',
+                clearable=False,
+                style={'display': 'none'}
+            ),
 
             # Tabs
             dbc.Tabs([
@@ -306,6 +304,7 @@ def toggle_view_mode(consolidated_clicks, sector_clicks, current_state):
 @callback(
     Output('sectors-store', 'data'),
     Output('sector-selector', 'options'),
+    Output('sector-pills-container', 'children'),
     Output('color-config-store', 'data'),
     Input('active-project-store', 'data'),
     prevent_initial_call=True
@@ -313,16 +312,38 @@ def toggle_view_mode(consolidated_clicks, sector_clicks, current_state):
 def load_project_sectors(active_project):
     """Load sectors and color configuration when project loads"""
     if not active_project or not active_project.get('path'):
-        return [], [], {}
+        return [], [], [], {}
 
     try:
         # Fetch sectors
         sectors_response = api.get_sectors(active_project['path'])
         sectors = sectors_response.get('sectors', [])
 
-        # Create dropdown options
+        # Create dropdown options (for backward compatibility)
         sector_options = [{'label': sector, 'value': idx}
                          for idx, sector in enumerate(sectors)]
+
+        # Create horizontal scrollable sector pills (React-style)
+        sector_pills = []
+        for idx, sector in enumerate(sectors):
+            pill = dbc.Button(
+                sector,
+                id={'type': 'sector-pill', 'index': idx},
+                size='sm',
+                outline=True if idx != 0 else False,
+                color='primary' if idx == 0 else 'primary',
+                style={
+                    'marginRight': '0.25rem',
+                    'fontSize': '0.875rem',
+                    'fontWeight': '600',
+                    'whiteSpace': 'nowrap',
+                    'border': '2px solid transparent' if idx == 0 else '2px solid #cbd5e1',
+                    'backgroundColor': '#4f46e5' if idx == 0 else '#ffffff',
+                    'color': '#ffffff' if idx == 0 else '#475569'
+                },
+                n_clicks=0
+            )
+            sector_pills.append(pill)
 
         # Fetch color configuration
         try:
@@ -331,11 +352,11 @@ def load_project_sectors(active_project):
         except:
             colors = {}
 
-        return sectors, sector_options, colors
+        return sectors, sector_options, sector_pills, colors
 
     except Exception as e:
         print(f"Error loading sectors: {e}")
-        return [], [], {}
+        return [], [], [], {}
 
 
 @callback(
@@ -362,6 +383,59 @@ def load_consolidated_data(sectors, state, active_project):
     except Exception as e:
         print(f"Error loading consolidated data: {e}")
         return None
+
+
+@callback(
+    Output('sector-selector', 'value'),
+    Output('sector-pills-container', 'children', allow_duplicate=True),
+    Input({'type': 'sector-pill', 'index': ALL}, 'n_clicks'),
+    State('sectors-store', 'data'),
+    State('sector-selector', 'value'),
+    prevent_initial_call=True
+)
+def handle_sector_pill_click(n_clicks_list, sectors, current_sector_idx):
+    """Handle sector pill clicks and update styling"""
+    ctx = callback_context
+    if not ctx.triggered or not sectors:
+        return no_update, no_update
+
+    # Find which pill was clicked
+    triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    if not triggered_id or triggered_id == '':
+        return no_update, no_update
+
+    # Parse the clicked sector index
+    import json
+    try:
+        pill_id = json.loads(triggered_id)
+        clicked_idx = pill_id['index']
+    except:
+        return no_update, no_update
+
+    # Update sector pills with new active state
+    sector_pills = []
+    for idx, sector in enumerate(sectors):
+        is_active = (idx == clicked_idx)
+        pill = dbc.Button(
+            sector,
+            id={'type': 'sector-pill', 'index': idx},
+            size='sm',
+            outline=not is_active,
+            color='primary',
+            style={
+                'marginRight': '0.25rem',
+                'fontSize': '0.875rem',
+                'fontWeight': '600',
+                'whiteSpace': 'nowrap',
+                'border': '2px solid transparent' if is_active else '2px solid #cbd5e1',
+                'backgroundColor': '#4f46e5' if is_active else '#ffffff',
+                'color': '#ffffff' if is_active else '#475569'
+            },
+            n_clicks=0
+        )
+        sector_pills.append(pill)
+
+    return clicked_idx, sector_pills
 
 
 @callback(
@@ -403,7 +477,7 @@ def load_sector_data(sector_idx, sectors, active_project, state):
     State('sectors-store', 'data')
 )
 def render_consolidated_data_table(data, unit, sectors):
-    """Render consolidated data table"""
+    """Render consolidated data table with sticky header and first column"""
     if not data or not sectors:
         return dbc.Alert('No data available. Please load project data.', color='info')
 
@@ -419,15 +493,61 @@ def render_consolidated_data_table(data, unit, sectors):
             if col in df.columns:
                 df[col] = df[col] * factor
 
-        # Create table
-        table = dbc.Table.from_dataframe(
-            df,
-            striped=True,
-            bordered=True,
-            hover=True,
-            responsive=True,
-            size='sm',
-            className='mb-0'
+        # Create custom table with sticky header and first column
+        # Table header
+        header_cells = [
+            html.Th(
+                col,
+                style={
+                    'position': 'sticky' if i == 0 else 'static',
+                    'left': '0' if i == 0 else 'auto',
+                    'top': '0',
+                    'zIndex': '20' if i == 0 else '10',
+                    'backgroundColor': '#f8fafc',
+                    'fontWeight': '600',
+                    'borderBottom': '2px solid #e2e8f0',
+                    'padding': '0.5rem',
+                    'fontSize': '0.875rem',
+                    'whiteSpace': 'nowrap'
+                }
+            )
+            for i, col in enumerate(df.columns)
+        ]
+
+        # Table rows
+        table_rows = []
+        for idx, row in df.iterrows():
+            cells = [
+                html.Td(
+                    f'{row[col]:.2f}' if isinstance(row[col], (int, float)) and col != 'Year' else str(row[col]),
+                    style={
+                        'position': 'sticky' if i == 0 else 'static',
+                        'left': '0' if i == 0 else 'auto',
+                        'zIndex': '10' if i == 0 else '1',
+                        'backgroundColor': '#ffffff' if i == 0 else 'transparent',
+                        'padding': '0.5rem',
+                        'fontSize': '0.875rem',
+                        'fontWeight': '700' if i == 0 else '600',
+                        'whiteSpace': 'nowrap',
+                        'borderBottom': '1px solid #f1f5f9'
+                    },
+                    className='table-hover'
+                )
+                for i, col in enumerate(df.columns)
+            ]
+            table_rows.append(html.Tr(cells))
+
+        table = html.Table(
+            [
+                html.Thead(html.Tr(header_cells)),
+                html.Tbody(table_rows)
+            ],
+            style={
+                'width': '100%',
+                'borderCollapse': 'collapse',
+                'fontSize': '0.875rem'
+            },
+            className='table table-sm table-striped table-hover'
         )
 
         return html.Div([
@@ -435,7 +555,16 @@ def render_consolidated_data_table(data, unit, sectors):
                 html.H5(f'Consolidated Electricity Demand ({ConversionFactors.get_label(unit)})',
                        className='mb-3')
             ]),
-            table,
+            html.Div(
+                table,
+                style={
+                    'overflowX': 'auto',
+                    'overflowY': 'auto',
+                    'maxHeight': '78vh',
+                    'border': '1px solid #e2e8f0',
+                    'borderRadius': '0.375rem'
+                }
+            ),
             html.P(
                 f'Showing data in {ConversionFactors.get_label(unit)}. Total sectors: {len(sectors)}',
                 className='text-muted mt-3 mb-0',
@@ -621,7 +750,7 @@ def render_consolidated_line_chart(data, unit, sectors, colors):
     State('sectors-store', 'data')
 )
 def render_sector_data_table(data, unit, sector_idx, sectors):
-    """Render sector-specific data table"""
+    """Render sector-specific data table with sticky header and first column"""
     if not data or sector_idx is None or not sectors:
         return dbc.Alert('No data available. Please select a sector.', color='info')
 
@@ -639,15 +768,60 @@ def render_sector_data_table(data, unit, sector_idx, sectors):
             if col in df.columns:
                 df[col] = df[col] * factor
 
-        # Create table
-        table = dbc.Table.from_dataframe(
-            df,
-            striped=True,
-            bordered=True,
-            hover=True,
-            responsive=True,
-            size='sm',
-            className='mb-0'
+        # Create custom table with sticky header and first column
+        # Table header
+        header_cells = [
+            html.Th(
+                col,
+                style={
+                    'position': 'sticky' if i == 0 else 'static',
+                    'left': '0' if i == 0 else 'auto',
+                    'top': '0',
+                    'zIndex': '20' if i == 0 else '10',
+                    'backgroundColor': '#f8fafc',
+                    'fontWeight': '600',
+                    'borderBottom': '2px solid #e2e8f0',
+                    'padding': '0.5rem',
+                    'fontSize': '0.875rem',
+                    'whiteSpace': 'nowrap'
+                }
+            )
+            for i, col in enumerate(df.columns)
+        ]
+
+        # Table rows
+        table_rows = []
+        for idx, row in df.iterrows():
+            cells = [
+                html.Td(
+                    f'{row[col]:.2f}' if isinstance(row[col], (int, float)) and col not in ['Year', 'year'] else str(row[col]),
+                    style={
+                        'position': 'sticky' if i == 0 else 'static',
+                        'left': '0' if i == 0 else 'auto',
+                        'zIndex': '10' if i == 0 else '1',
+                        'backgroundColor': '#ffffff' if i == 0 else 'transparent',
+                        'padding': '0.5rem',
+                        'fontSize': '0.875rem',
+                        'fontWeight': '700' if i == 0 else '600',
+                        'whiteSpace': 'nowrap',
+                        'borderBottom': '1px solid #f1f5f9'
+                    }
+                )
+                for i, col in enumerate(df.columns)
+            ]
+            table_rows.append(html.Tr(cells))
+
+        table = html.Table(
+            [
+                html.Thead(html.Tr(header_cells)),
+                html.Tbody(table_rows)
+            ],
+            style={
+                'width': '100%',
+                'borderCollapse': 'collapse',
+                'fontSize': '0.875rem'
+            },
+            className='table table-sm table-striped table-hover'
         )
 
         return html.Div([
@@ -655,7 +829,16 @@ def render_sector_data_table(data, unit, sector_idx, sectors):
                 html.H5(f'{sector_name} - Demand Data ({ConversionFactors.get_label(unit)})',
                        className='mb-3')
             ]),
-            table,
+            html.Div(
+                table,
+                style={
+                    'overflowX': 'auto',
+                    'overflowY': 'auto',
+                    'maxHeight': '78vh',
+                    'border': '1px solid #e2e8f0',
+                    'borderRadius': '0.375rem'
+                }
+            ),
             html.P(
                 f'Showing data in {ConversionFactors.get_label(unit)}',
                 className='text-muted mt-3 mb-0',
