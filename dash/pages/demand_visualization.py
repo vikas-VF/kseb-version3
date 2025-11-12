@@ -1605,23 +1605,25 @@ def render_sector_line_chart_single(data, unit, sector, state, title_suffix=''):
                 hoverinfo='skip'
             ))
 
-            # Add labels
+            # Add labels - MATCHES REACT STYLING EXACTLY
             fig.add_annotation(
                 x=years[0] + (forecast_start_year - years[0]) / 2,
                 y=y_max * 0.95,
-                text='Historical/Actual',
+                text='<b>Historical / Actual</b>',  # Bold text
                 showarrow=False,
-                font=dict(size=10, color='#64748b'),
-                bgcolor='rgba(255,255,255,0.8)'
+                font=dict(size=13, color='#000000'),  # Match React: size 13, black
+                bgcolor='rgba(255,255,255,0.9)',
+                borderpad=4
             )
 
             fig.add_annotation(
                 x=forecast_start_year + (years[-1] - forecast_start_year) / 2,
                 y=y_max * 0.95,
-                text='Projected',
+                text='<b>Projected</b>',  # Bold text
                 showarrow=False,
-                font=dict(size=10, color='#64748b'),
-                bgcolor='rgba(255,255,255,0.8)'
+                font=dict(size=13, color='#DC2626'),  # Match React: size 13, red
+                bgcolor='rgba(255,255,255,0.9)',
+                borderpad=4
             )
 
         # Update layout
