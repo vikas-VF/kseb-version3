@@ -386,7 +386,7 @@ def load_consolidated_data(sectors, state, active_project):
 
 
 @callback(
-    Output('sector-selector', 'value'),
+    Output('sector-selector', 'value', allow_duplicate=True),
     Output('sector-pills-container', 'children', allow_duplicate=True),
     Input({'type': 'sector-pill', 'index': ALL}, 'n_clicks'),
     State('sectors-store', 'data'),
