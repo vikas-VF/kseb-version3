@@ -292,7 +292,10 @@ def layout(active_project=None):
             dbc.Col([
                 create_workflow_sidebar(active_project)
             ], width=12, lg=4)
-        ])
+        ]),
+
+        # Hidden store for delete project tracking
+        dcc.Store(id='delete-project-id-store', data=None)
 
     ], fluid=True, style={'padding': '2rem'})
 

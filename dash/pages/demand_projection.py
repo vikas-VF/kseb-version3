@@ -306,8 +306,7 @@ def toggle_view_mode(consolidated_clicks, sector_clicks, current_state):
     Output('sector-selector', 'options'),
     Output('sector-pills-container', 'children'),
     Output('color-config-store', 'data'),
-    Input('active-project-store', 'data'),
-    prevent_initial_call=True
+    Input('active-project-store', 'data')
 )
 def load_project_sectors(active_project):
     """Load sectors and color configuration when project loads"""
