@@ -5,7 +5,53 @@
 
 ---
 
-## ✅ Issue #1: FIXED - dash.register_page() Error
+## ✅ Issue #1: FIXED - Duplicate Callback Outputs
+
+### Problem
+```
+Duplicate callback outputs
+In the callback for output(s): active-project-store.data
+Output 1 (active-project-store.data) is already in use.
+```
+
+**Root Cause:**
+- `callbacks/project_callbacks.py` had both `create_project` and `load_project` callbacks
+- `pages/create_project.py` also had a `create_project` callback
+- `pages/load_project.py` also had a `load_project` callback
+- Both callbacks for each function were triggered by the same button (e.g., `create-project-btn`)
+- Both callbacks were trying to update the same stores: `active-project-store`, `selected-page-store`, `recent-projects-store`
+- The callbacks in `project_callbacks.py` referenced **non-existent component IDs** (`create-project-name-input`, `create-project-path-input`) from an old implementation
+- The actual page layouts use different IDs (`project-name-input`, `project-location-input`)
+
+### Solution Applied
+**Files Modified:**
+- `dash/callbacks/project_callbacks.py` (completely emptied the register_callbacks function)
+
+**Change:**
+```python
+# Before: Had create_project and load_project callbacks (110+ lines)
+
+# After:
+def register_callbacks(app):
+    # Note: create_project callback is now implemented in pages/create_project.py
+    # to avoid duplicate callback conflicts and to use the correct component IDs
+
+    # Note: load_project callback is now implemented in pages/load_project.py
+    # to avoid duplicate callback conflicts and to use the correct output IDs
+    pass
+```
+
+**Why This Fix Works:**
+1. ✅ Removes all duplicate callbacks - each callback now has a single implementation
+2. ✅ Callbacks are colocated with their page layouts - easier to maintain
+3. ✅ Uses correct component IDs that actually exist in the layouts
+4. ✅ Each button triggers exactly one callback, not multiple conflicting ones
+
+**Status:** ✅ **FIXED** (Committed: 900309c)
+
+---
+
+## ✅ Issue #2: FIXED - dash.register_page() Error
 
 ### Problem
 ```
@@ -35,7 +81,7 @@ dash.register_page(__name__, path='/pypsa/model-config', title='PyPSA Model Conf
 
 ---
 
-## ⚠️ Issue #2: INCOMPLETE - Missing Methods in local_service.py
+## ⚠️ Issue #3: INCOMPLETE - Missing Methods in local_service.py
 
 ### Problem
 When we converted from `api_client.py` (HTTP-based) to `local_service.py` (direct execution), we only implemented **26 out of 51 methods**.
@@ -533,9 +579,11 @@ def get_load_duration_curve(self, project_path: str, profile_name: str, fiscal_y
 | d0116f5 | Add final implementation summary | 1 | +690 |
 | 94a019b | Fix dash.register_page error | 2 | +2 / -4 |
 | 4a098d1 | Add issues and fixes documentation | 1 | +375 |
-| **1ed1e48** | **Implement 18 missing methods** | **1** | **+458** |
+| 1ed1e48 | Implement 18 missing methods | 1 | +458 |
+| a9fb335 | Update ISSUES_AND_FIXES with completion status | 1 | +7 / -7 |
+| **900309c** | **Fix duplicate callback errors** | **1** | **+7 / -110** |
 
-**Total:** 7 commits, 38 files changed, +9,330 insertions, -6,522 deletions
+**Total:** 9 commits, 39 files changed, +9,344 insertions, -6,639 deletions
 
 ---
 
