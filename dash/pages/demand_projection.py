@@ -1256,9 +1256,18 @@ def fetch_configure_modal_data(n_clicks, active_project, sectors):
         scenarios_response = api.get_scenarios(active_project['path'])
         existing_scenarios = scenarios_response.get('scenarios', [])
 
-        # Fetch metadata for each sector (correlation data and row counts)
+        # Validate which sectors have data (filters out empty sectors)
+        validation_response = api.validate_sectors_with_data(active_project['path'], sectors)
+        valid_sectors = validation_response.get('valid_sectors', sectors) if validation_response.get('success') else sectors
+        invalid_sectors = validation_response.get('invalid_sectors', []) if validation_response.get('success') else []
+
+        # Log validation results
+        if invalid_sectors:
+            logger.warning(f"Skipping {len(invalid_sectors)} sectors with no data: {[s['sector'] for s in invalid_sectors]}")
+
+        # Fetch metadata for each VALID sector (correlation data and row counts)
         sector_metadata = {}
-        for sector in sectors:
+        for sector in valid_sectors:
             try:
                 # Extract sector data to get row count
                 data_response = api.extract_sector_data(active_project['path'], sector)
@@ -1462,6 +1471,14 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
                        className='text-muted mb-3',
                        style={'fontSize': '0.875rem'}),
 
+                # Warning about filtered sectors (if any)
+                html.Div([
+                    dbc.Alert([
+                        html.I(className='bi bi-info-circle me-2'),
+                        html.Span(f"Note: {len(sectors) - len(sector_metadata)} sectors have been filtered out due to missing or empty data. Only sectors with valid data are shown below.")
+                    ], color='info', className='mb-3', style={'fontSize': '0.875rem'})
+                ]) if len(sector_metadata) < len(sectors) else html.Div(),
+
                 # Table
                 html.Div([
                     # Table header
@@ -1509,7 +1526,7 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
                         'borderRadius': '0.5rem 0.5rem 0 0'
                     }),
 
-                    # Table rows - one per sector
+                    # Table rows - one per sector (only valid sectors with data)
                     html.Div([
                         html.Div([
                             # Column 1: Sector Name
@@ -1579,7 +1596,7 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
                             'backgroundColor': '#ffffff' if idx % 2 == 0 else '#f8fafc',
                             'transition': 'background-color 0.15s ease'
                         })
-                        for idx, sector in enumerate(sectors)
+                        for idx, sector in enumerate(sector_metadata.keys())  # ONLY show sectors with valid data
                     ], style={'maxHeight': '400px', 'overflowY': 'auto'})
                 ], style={
                     'border': '1px solid #e2e8f0',

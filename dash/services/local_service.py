@@ -340,6 +340,102 @@ class LocalService:
 
     # ==================== EXCEL PARSING ====================
 
+    def validate_sectors_with_data(self, project_path: str, sectors: list) -> Dict:
+        """
+        Validate which sectors have valid data (non-empty with Year and Electricity columns).
+        Returns dict with valid and invalid sector lists.
+
+        This helps filter out empty sectors before forecast configuration.
+        """
+        try:
+            inputs_dir = os.path.join(project_path, 'inputs')
+            excel_path = os.path.join(inputs_dir, 'input_demand_file.xlsx')
+
+            if not os.path.exists(excel_path):
+                return {
+                    'success': False,
+                    'error': 'input_demand_file.xlsx not found'
+                }
+
+            valid_sectors = []
+            invalid_sectors = []
+
+            workbook = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
+            available_sheets = {sheet.lower(): sheet for sheet in workbook.sheetnames}
+
+            for sector in sectors:
+                sector_lower = sector.lower()
+
+                # Check if sector sheet exists
+                if sector_lower not in available_sheets:
+                    invalid_sectors.append({
+                        'sector': sector,
+                        'reason': 'Sheet not found'
+                    })
+                    continue
+
+                # Try to read the sheet
+                try:
+                    actual_sheet_name = available_sheets[sector_lower]
+                    df = pd.read_excel(excel_path, sheet_name=actual_sheet_name)
+
+                    # Validate: must have at least 2 rows and Year + Electricity columns
+                    if df.empty or len(df) < 2:
+                        invalid_sectors.append({
+                            'sector': sector,
+                            'reason': 'Empty or insufficient data (need at least 2 rows)'
+                        })
+                        continue
+
+                    if 'Year' not in df.columns or 'Electricity' not in df.columns:
+                        invalid_sectors.append({
+                            'sector': sector,
+                            'reason': 'Missing required columns (Year, Electricity)'
+                        })
+                        continue
+
+                    # Check for non-null values
+                    year_valid = df['Year'].notna().any()
+                    elec_valid = df['Electricity'].notna().any()
+
+                    if not year_valid or not elec_valid:
+                        invalid_sectors.append({
+                            'sector': sector,
+                            'reason': 'No valid data in Year or Electricity column'
+                        })
+                        continue
+
+                    # Sector is valid
+                    valid_sectors.append(sector)
+
+                except Exception as e:
+                    invalid_sectors.append({
+                        'sector': sector,
+                        'reason': f'Error reading sheet: {str(e)}'
+                    })
+
+            workbook.close()
+
+            logger.info(f"Sector validation: {len(valid_sectors)} valid, {len(invalid_sectors)} invalid")
+            if invalid_sectors:
+                logger.warning(f"Invalid sectors: {[s['sector'] for s in invalid_sectors]}")
+
+            return {
+                'success': True,
+                'valid_sectors': valid_sectors,
+                'invalid_sectors': invalid_sectors,
+                'total_sectors': len(sectors),
+                'valid_count': len(valid_sectors),
+                'invalid_count': len(invalid_sectors)
+            }
+
+        except Exception as e:
+            logger.error(f"Error validating sectors: {e}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
     def extract_sector_data(self, project_path: str, sector: str) -> Dict:
         """
         Extract sector-specific data merged with economic indicators.
