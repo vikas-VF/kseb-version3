@@ -31,6 +31,10 @@ logger = logging.getLogger(__name__)
 forecast_processes = {}
 forecast_sse_queue = queue.Queue()
 
+# Global state for tracking PyPSA solver logs
+pypsa_solver_sse_queue = queue.Queue()
+pypsa_solver_processes = {}
+
 # Global PyPSA analyzer instance (with caching)
 pypsa_analyzer = PyPSAAnalyzer()
 
@@ -1025,6 +1029,10 @@ class LocalService:
     def get_generation_status_url(self) -> str:
         """Get SSE URL for load profile generation progress"""
         return '/api/generation-status'
+
+    def get_solver_logs_url(self) -> str:
+        """Get SSE URL for PyPSA solver logs"""
+        return '/api/pypsa-solver-logs'
 
     def cancel_forecast(self, process_id: str) -> Dict:
         """Cancel forecast (not applicable for local execution)"""

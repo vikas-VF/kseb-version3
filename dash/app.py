@@ -323,8 +323,8 @@ settings_callbacks.register_callbacks(app)
 from flask import Response, stream_with_context
 import queue as queue_module
 
-# Import the global forecast SSE queue from local_service
-from services.local_service import forecast_sse_queue
+# Import the global SSE queues from local_service
+from services.local_service import forecast_sse_queue, pypsa_solver_sse_queue
 
 @server.route('/api/forecast-progress')
 def forecast_progress_sse():
@@ -355,6 +355,47 @@ def forecast_progress_sse():
 
         except Exception as e:
             print(f"SSE error: {e}")
+            yield f"event: error\n"
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no'  # Disable nginx buffering
+        }
+    )
+
+@server.route('/api/pypsa-solver-logs')
+def pypsa_solver_logs_sse():
+    """
+    Server-Sent Events endpoint for PyPSA solver logs.
+    Streams real-time solver output during optimization to the frontend.
+    """
+    def generate():
+        try:
+            while True:
+                try:
+                    # Get log event from queue (blocks until available or timeout)
+                    event = pypsa_solver_sse_queue.get(timeout=30)
+
+                    # Send event
+                    event_type = event.get('type', 'log')
+                    yield f"event: {event_type}\n"
+                    yield f"data: {json.dumps(event)}\n\n"
+
+                    # Check if this is the end event
+                    if event_type in ['end', 'error', 'complete']:
+                        break
+
+                except queue_module.Empty:
+                    # Timeout - send keep-alive comment
+                    yield ": keep-alive\n\n"
+
+        except Exception as e:
+            print(f"SSE solver log error: {e}")
             yield f"event: error\n"
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
