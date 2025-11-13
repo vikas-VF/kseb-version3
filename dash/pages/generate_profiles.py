@@ -336,7 +336,7 @@ clientside_callback(
     Output('sse-connection-status', 'children'),
     Input('sse-control-store', 'data'),
     State('generation-process-state', 'data'),
-    prevent_initial_call=False
+    prevent_initial_call=True  # Changed to True to prevent error before JS loads
 )
 
 
