@@ -10,8 +10,16 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
 import logging
 import openpyxl
+import subprocess
+import threading
+import queue
+import time
 
 logger = logging.getLogger(__name__)
+
+# Global state for tracking forecast processes
+forecast_processes = {}
+forecast_sse_queue = queue.Queue()
 
 
 # ==================== EXCEL PROCESSING HELPER FUNCTIONS ====================
@@ -167,6 +175,9 @@ class LocalService:
     def create_project(self, name: str, location: str, description: str = '') -> Dict:
         """Create new project with folder structure"""
         try:
+            import shutil
+            from pathlib import Path
+
             project_path = os.path.join(location, name)
 
             # Create directory structure
@@ -175,6 +186,25 @@ class LocalService:
             os.makedirs(os.path.join(project_path, 'results', 'demand_forecasts'), exist_ok=True)
             os.makedirs(os.path.join(project_path, 'results', 'load_profiles'), exist_ok=True)
             os.makedirs(os.path.join(project_path, 'results', 'pypsa_optimization'), exist_ok=True)
+
+            # Copy Excel template files to inputs folder (matching FastAPI behavior)
+            template_dir = Path(__file__).parent.parent / 'input'
+            inputs_dir = Path(project_path) / 'inputs'
+
+            template_files = [
+                'input_demand_file.xlsx',
+                'load_curve_template.xlsx',
+                'pypsa_input_template.xlsx'
+            ]
+
+            for template_file in template_files:
+                src = template_dir / template_file
+                dst = inputs_dir / template_file
+                if src.exists():
+                    shutil.copy2(src, dst)
+                    logger.info(f"Copied template: {template_file} to {dst}")
+                else:
+                    logger.warning(f"Template file not found: {src}")
 
             # Create project.json
             project_meta = {
@@ -191,6 +221,8 @@ class LocalService:
 
         except Exception as e:
             logger.error(f"Error creating project: {e}")
+            import traceback
+            traceback.print_exc()
             return {'success': False, 'error': str(e)}
 
     def load_project(self, project_path: str) -> Dict:
@@ -754,25 +786,68 @@ class LocalService:
     # ==================== FORECASTING ====================
 
     def start_demand_forecast(self, project_path: str, config: Dict) -> Dict:
-        """Start demand forecasting process"""
+        """Start demand forecasting process with subprocess execution (matching FastAPI)"""
         try:
-            # TODO: Implement actual forecasting logic
-            # For now, return a stub response indicating forecast initiated
-            logger.info(f"Forecast requested with config: {config}")
+            logger.info(f"Starting demand forecast with config: {config}")
 
-            # Save config for later implementation
-            config_path = os.path.join(project_path, 'config', 'forecast_config.json')
-            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+            # Create scenario results directory
+            scenario_path = Path(project_path) / "results" / "demand_forecasts" / config['scenario_name']
+            scenario_path.mkdir(parents=True, exist_ok=True)
 
+            # Prepare configuration for Python script (matching FastAPI format)
+            config_for_python = {
+                "scenario_name": config['scenario_name'],
+                "target_year": config.get('target_year', 2037),
+                "exclude_covid": config.get('exclude_covid_years', False),
+                "forecast_path": str(scenario_path),
+                "sectors": {}
+            }
+
+            # Convert sectors to format expected by forecasting.py
+            for sector in config.get('sectors', []):
+                sector_name = sector.get('name', sector.get('sector_name', ''))
+                config_for_python["sectors"][sector_name] = {
+                    "enabled": True,
+                    "models": sector.get('selected_methods', sector.get('models', [])),
+                    "parameters": {
+                        "MLR": {"independent_vars": sector.get('mlr_parameters', [])},
+                        "WAM": {"window_size": sector.get('wam_window', 10)}
+                    },
+                    "data": sector.get('data', [])
+                }
+
+            # Write config to file
+            config_path = scenario_path / "forecast_config.json"
             with open(config_path, 'w') as f:
-                json.dump(config, f, indent=2)
+                json.dump(config_for_python, f, indent=2)
 
-            logger.info(f"Forecast configuration saved to {config_path}")
+            logger.info(f"Forecast configuration saved to: {config_path}")
+
+            # Start subprocess in background thread
+            process_id = f"forecast_{config['scenario_name']}"
+
+            thread = threading.Thread(
+                target=self._run_forecast_subprocess,
+                args=(config_path, process_id, config['scenario_name'])
+            )
+            thread.daemon = True
+            thread.start()
+
+            # Track process
+            global forecast_processes
+            forecast_processes[process_id] = {
+                'thread': thread,
+                'status': 'running',
+                'scenario': config['scenario_name'],
+                'start_time': time.time()
+            }
+
+            logger.info(f"Forecast process started with ID: {process_id}")
 
             return {
                 'success': True,
-                'process_id': f"forecast_{config.get('scenario_name', 'default')}",
-                'message': 'Forecast configuration saved. Implementation in progress.'
+                'process_id': process_id,
+                'message': 'Forecast process started successfully.'
             }
 
         except Exception as e:
@@ -781,15 +856,143 @@ class LocalService:
             traceback.print_exc()
             return {'success': False, 'error': str(e)}
 
+    def _run_forecast_subprocess(self, config_path: Path, process_id: str, scenario_name: str):
+        """
+        Run forecasting subprocess and stream output to SSE queue.
+        Matches FastAPI implementation in forecast_routes.py:182-290
+        """
+        global forecast_sse_queue, forecast_processes
+
+        script_path = Path(__file__).parent.parent / "models" / "forecasting.py"
+        logger.info(f"Forecast script path: {script_path}")
+
+        try:
+            # Verify script exists
+            if not script_path.exists():
+                error_msg = f"Forecasting script not found: {script_path}"
+                logger.error(error_msg)
+                forecast_sse_queue.put({
+                    'type': 'end',
+                    'status': 'failed',
+                    'error': error_msg
+                })
+                forecast_processes[process_id]['status'] = 'failed'
+                return
+
+            # Verify config exists
+            if not config_path.exists():
+                error_msg = f"Config file not found: {config_path}"
+                logger.error(error_msg)
+                forecast_sse_queue.put({
+                    'type': 'end',
+                    'status': 'failed',
+                    'error': error_msg
+                })
+                forecast_processes[process_id]['status'] = 'failed'
+                return
+
+            logger.info(f"Starting subprocess: python {script_path} --config {config_path}")
+
+            # Start subprocess (matching FastAPI implementation)
+            process = subprocess.Popen(
+                ["python", str(script_path), "--config", str(config_path)],
+                cwd=str(script_path.parent),  # Set working directory
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,  # Text mode for easier string handling
+                bufsize=1   # Line buffered
+            )
+
+            logger.info(f"Subprocess started with PID: {process.pid}")
+            forecast_processes[process_id]['pid'] = process.pid
+
+            # Read stdout line by line
+            for line in iter(process.stdout.readline, ''):
+                line = line.strip()
+                if line:
+                    logger.info(f"[Forecast STDOUT]: {line}")
+
+                    # Parse progress lines (matching FastAPI format)
+                    if line.startswith('PROGRESS:'):
+                        try:
+                            progress_data = json.loads(line[9:])  # Remove 'PROGRESS:' prefix
+                            forecast_sse_queue.put(progress_data)
+                            logger.debug(f"Progress event queued: {progress_data.get('type', 'unknown')}")
+                        except json.JSONDecodeError as e:
+                            logger.error(f"Failed to parse progress JSON: {e}")
+                    else:
+                        # Queue other output as info logs
+                        forecast_sse_queue.put({
+                            'type': 'log',
+                            'message': line,
+                            'level': 'info'
+                        })
+
+            # Wait for process completion
+            process.wait()
+
+            logger.info(f"Forecast process completed with return code: {process.returncode}")
+
+            # Send completion event
+            if process.returncode == 0:
+                forecast_sse_queue.put({
+                    'type': 'end',
+                    'status': 'completed',
+                    'message': f'Forecast for scenario "{scenario_name}" completed successfully',
+                    'scenario_name': scenario_name
+                })
+                forecast_processes[process_id]['status'] = 'completed'
+            else:
+                # Read stderr
+                stderr_output = process.stderr.read()
+                error_msg = f'Forecast process failed with code {process.returncode}'
+                if stderr_output:
+                    error_msg += f': {stderr_output[:500]}'  # Limit error message length
+
+                logger.error(error_msg)
+                forecast_sse_queue.put({
+                    'type': 'end',
+                    'status': 'failed',
+                    'error': error_msg,
+                    'scenario_name': scenario_name
+                })
+                forecast_processes[process_id]['status'] = 'failed'
+
+        except Exception as e:
+            logger.error(f"Forecast subprocess error: {e}")
+            import traceback
+            traceback.print_exc()
+            forecast_sse_queue.put({
+                'type': 'end',
+                'status': 'failed',
+                'error': str(e),
+                'scenario_name': scenario_name
+            })
+            forecast_processes[process_id]['status'] = 'failed'
+
     def get_forecast_progress(self, project_path: str, process_id: str) -> Dict:
-        """Get forecast progress (for local execution, return completed)"""
-        # For local execution, forecasting is synchronous
+        """Get forecast progress from tracked processes"""
+        global forecast_processes
+
+        if process_id in forecast_processes:
+            process_info = forecast_processes[process_id]
+            return {
+                'status': process_info.get('status', 'unknown'),
+                'progress': 0 if process_info.get('status') == 'running' else 100,
+                'current_task': f"Forecast {process_info.get('status', 'running')}",
+                'logs': []
+            }
+
         return {
-            'status': 'completed',
-            'progress': 100,
-            'current_task': 'Forecast completed',
-            'logs': ['Forecast executed successfully']
+            'status': 'not_found',
+            'progress': 0,
+            'current_task': 'Process not found',
+            'logs': []
         }
+
+    def get_forecast_status_url(self) -> str:
+        """Get SSE URL for forecast progress (matching FastAPI)"""
+        return '/api/forecast-progress'
 
     def cancel_forecast(self, process_id: str) -> Dict:
         """Cancel forecast (not applicable for local execution)"""

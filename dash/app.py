@@ -317,6 +317,58 @@ pypsa_callbacks.register_callbacks(app)
 settings_callbacks.register_callbacks(app)
 
 # =============================================================================
+# FLASK SSE ROUTES (Server-Sent Events for Real-Time Progress)
+# =============================================================================
+
+from flask import Response, stream_with_context
+import queue as queue_module
+
+# Import the global forecast SSE queue from local_service
+from services.local_service import forecast_sse_queue
+
+@server.route('/api/forecast-progress')
+def forecast_progress_sse():
+    """
+    Server-Sent Events endpoint for demand forecast progress.
+    Streams progress events from the forecasting subprocess to the frontend.
+    Matches FastAPI implementation in forecast_routes.py:49-108
+    """
+    def generate():
+        try:
+            while True:
+                try:
+                    # Get event from queue (blocks until available or timeout)
+                    event = forecast_sse_queue.get(timeout=15)
+
+                    # Send event
+                    event_type = event.get('type', 'progress')
+                    yield f"event: {event_type}\n"
+                    yield f"data: {json.dumps(event)}\n\n"
+
+                    # Check if this is the end event
+                    if event_type == 'end':
+                        break
+
+                except queue_module.Empty:
+                    # Timeout - send keep-alive comment
+                    yield ": keep-alive\n\n"
+
+        except Exception as e:
+            print(f"SSE error: {e}")
+            yield f"event: error\n"
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no'  # Disable nginx buffering
+        }
+    )
+
+# =============================================================================
 # RUN THE APP
 # =============================================================================
 
