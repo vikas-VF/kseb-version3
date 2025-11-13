@@ -23,7 +23,7 @@ if models_path not in sys.path:
 
 # Import PyPSA network caching and analyzer
 from network_cache import load_network_cached, get_cache_stats, invalidate_network_cache
-from pypsa_analyzer import PyPSAAnalyzer
+from pypsa_analyzer import PyPSASingleNetworkAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +34,6 @@ forecast_sse_queue = queue.Queue()
 # Global state for tracking PyPSA solver logs
 pypsa_solver_sse_queue = queue.Queue()
 pypsa_solver_processes = {}
-
-# Global PyPSA analyzer instance (with caching)
-pypsa_analyzer = PyPSAAnalyzer()
 
 
 # ==================== EXCEL PROCESSING HELPER FUNCTIONS ====================
@@ -1124,10 +1121,10 @@ class LocalService:
             if models_path not in sys.path:
                 sys.path.insert(0, models_path)
 
-            from load_profile_generation import LoadProfileGenerator
+            from load_profile_generation import AdvancedLoadProfileGenerator
 
             # Create generator instance
-            generator = LoadProfileGenerator(config['project_path'])
+            generator = AdvancedLoadProfileGenerator(config['project_path'])
 
             # Execute generation
             results = generator.generate(config)
@@ -1594,8 +1591,10 @@ class LocalService:
             network_path = self._get_network_path(project_path, scenario_name, network_file)
             network = load_network_cached(network_path)
 
-            # Use pypsa_analyzer for comprehensive analysis
-            analysis = pypsa_analyzer.analyze_network(network)
+            # Create analyzer instance for this network
+            analyzer = PyPSASingleNetworkAnalyzer(network)
+            # Run all available analyses
+            analysis = analyzer.run_all_analyses()
 
             return {
                 'success': True,
@@ -1611,7 +1610,9 @@ class LocalService:
             network_path = self._get_network_path(project_path, scenario_name, network_file)
             network = load_network_cached(network_path)
 
-            energy_mix = pypsa_analyzer.get_energy_mix(network)
+            # Create analyzer instance for this network
+            analyzer = PyPSASingleNetworkAnalyzer(network)
+            energy_mix = analyzer.get_energy_mix()
 
             return {
                 'success': True,
@@ -1627,7 +1628,9 @@ class LocalService:
             network_path = self._get_network_path(project_path, scenario_name, network_file)
             network = load_network_cached(network_path)
 
-            capacity_factors = pypsa_analyzer.get_capacity_factors(network)
+            # Create analyzer instance for this network
+            analyzer = PyPSASingleNetworkAnalyzer(network)
+            capacity_factors = analyzer.get_capacity_factors()
 
             return {
                 'success': True,
@@ -1643,7 +1646,9 @@ class LocalService:
             network_path = self._get_network_path(project_path, scenario_name, network_file)
             network = load_network_cached(network_path)
 
-            renewable_share = pypsa_analyzer.get_renewable_share(network)
+            # Create analyzer instance for this network
+            analyzer = PyPSASingleNetworkAnalyzer(network)
+            renewable_share = analyzer.get_renewable_share()
 
             return {
                 'success': True,
@@ -1659,7 +1664,9 @@ class LocalService:
             network_path = self._get_network_path(project_path, scenario_name, network_file)
             network = load_network_cached(network_path)
 
-            emissions = pypsa_analyzer.get_emissions_tracking(network)
+            # Create analyzer instance for this network
+            analyzer = PyPSASingleNetworkAnalyzer(network)
+            emissions = analyzer.get_emissions_tracking()
 
             return {
                 'success': True,
@@ -1675,7 +1682,9 @@ class LocalService:
             network_path = self._get_network_path(project_path, scenario_name, network_file)
             network = load_network_cached(network_path)
 
-            system_costs = pypsa_analyzer.get_system_costs(network)
+            # Create analyzer instance for this network
+            analyzer = PyPSASingleNetworkAnalyzer(network)
+            system_costs = analyzer.get_system_costs()
 
             return {
                 'success': True,
@@ -1691,7 +1700,9 @@ class LocalService:
             network_path = self._get_network_path(project_path, scenario_name, network_file)
             network = load_network_cached(network_path)
 
-            dispatch = pypsa_analyzer.get_dispatch_data(network)
+            # Create analyzer instance for this network
+            analyzer = PyPSASingleNetworkAnalyzer(network)
+            dispatch = analyzer.get_dispatch_data()
 
             return {
                 'success': True,
@@ -1707,31 +1718,43 @@ class LocalService:
             network_path = self._get_network_path(project_path, scenario_name, network_file)
             network = load_network_cached(network_path)
 
-            # Get generator capacities
-            capacity_by_carrier = {}
-            if len(network.generators) > 0:
-                capacity_by_carrier = network.generators.groupby('carrier')['p_nom_opt'].sum().to_dict()
+            # Create analyzer instance for this network
+            analyzer = PyPSASingleNetworkAnalyzer(network)
+            capacities = analyzer.get_total_capacities()
 
             return {
                 'success': True,
-                'capacity': capacity_by_carrier,
-                'total_capacity': sum(capacity_by_carrier.values())
+                'capacities': capacities
             }
         except Exception as e:
             logger.error(f"Error getting capacity: {e}")
             return {'success': False, 'error': str(e)}
 
     def get_pypsa_storage(self, project_path: str, scenario_name: str, network_file: str) -> Dict:
-        """Get storage operation profiles (state of charge, charging, discharging)"""
+        """Get storage units information"""
         try:
             network_path = self._get_network_path(project_path, scenario_name, network_file)
             network = load_network_cached(network_path)
 
-            storage = pypsa_analyzer.get_storage_operation(network)
+            # Get storage units data directly from network
+            storage_data = {}
+            if len(network.storage_units) > 0:
+                storage_data = {
+                    'storage_units': network.storage_units.to_dict('records'),
+                    'count': len(network.storage_units)
+                }
+
+                # Add time series if available
+                if hasattr(network, 'storage_units_t') and hasattr(network.storage_units_t, 'state_of_charge'):
+                    soc = network.storage_units_t.state_of_charge
+                    storage_data['state_of_charge'] = {
+                        'timestamps': soc.index.tolist(),
+                        'data': soc.to_dict()
+                    }
 
             return {
                 'success': True,
-                'storage': storage
+                'storage': storage_data
             }
         except Exception as e:
             logger.error(f"Error getting storage: {e}")
