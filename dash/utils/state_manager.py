@@ -311,3 +311,49 @@ def safe_json_dumps(obj: Any, default: str = '{}') -> str:
         return json.dumps(obj)
     except (TypeError, ValueError):
         return default
+
+
+def safe_numeric(value: Any, default: float = 0.0) -> float:
+    """
+    Safely convert value to float, handling strings, None, and other types.
+
+    Args:
+        value: Value to convert (can be str, int, float, None, etc.)
+        default: Default value if conversion fails
+
+    Returns:
+        Float value or default
+    """
+    if value is None or value == '' or value == 'N/A':
+        return default
+
+    if isinstance(value, (int, float)):
+        return float(value)
+
+    if isinstance(value, str):
+        try:
+            # Remove commas and spaces
+            cleaned = value.replace(',', '').replace(' ', '').strip()
+            if cleaned == '' or cleaned == 'N/A':
+                return default
+            return float(cleaned)
+        except (ValueError, AttributeError):
+            return default
+
+    return default
+
+
+def safe_multiply(value: Any, factor: float, default: float = 0.0) -> float:
+    """
+    Safely multiply a value by a factor, handling non-numeric values.
+
+    Args:
+        value: Value to multiply
+        factor: Multiplication factor
+        default: Default value if conversion fails
+
+    Returns:
+        Result of multiplication or default
+    """
+    numeric_value = safe_numeric(value, default)
+    return numeric_value * factor

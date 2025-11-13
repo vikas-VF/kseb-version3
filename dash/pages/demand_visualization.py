@@ -27,7 +27,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from services.local_service import service as api
-from utils.state_manager import StateManager, ConversionFactors
+from utils.state_manager import StateManager, ConversionFactors, safe_numeric, safe_multiply
 
 
 def layout(active_project=None):
@@ -1109,7 +1109,7 @@ def render_consolidated_area_chart_content(data, unit, sectors, colors):
             if sector in df.columns:
                 fig.add_trace(go.Scatter(
                     x=df['Year'],
-                    y=df[sector] * factor,
+                    y=df[sector].apply(lambda x: safe_multiply(x, factor)),
                     name=sector,
                     mode='lines',
                     stackgroup='one',
@@ -1150,14 +1150,15 @@ def render_consolidated_bar_chart_content(data, unit, sectors, colors):
             if sector in df.columns:
                 fig.add_trace(go.Bar(
                     x=df['Year'],
-                    y=df[sector] * factor,
+                    y=df[sector].apply(lambda x: safe_multiply(x, factor)),
                     name=sector,
                     marker_color=colors.get(sector, '#ccc'),
                     hovertemplate=f'{sector}<br>Year: %{{x}}<br>Demand: %{{y:.2f}} {ConversionFactors.get_label(unit)}<extra></extra>'
                 ))
 
         # Calculate and add total line
-        total_values = df[[s for s in sectors if s in df.columns]].sum(axis=1) * factor
+        numeric_cols = [s for s in sectors if s in df.columns]
+        total_values = df[numeric_cols].apply(lambda row: sum(safe_numeric(v) for v in row), axis=1) * factor
         fig.add_trace(go.Scatter(
             x=df['Year'],
             y=total_values,
@@ -1203,13 +1204,15 @@ def render_consolidated_table(data, unit, sectors):
         df = pd.DataFrame(data)
         factor = ConversionFactors.FACTORS.get(unit, 1)
 
-        # Apply unit conversion
+        # Apply unit conversion with safe multiplication
         for col in df.columns:
             if col != 'Year' and col in sectors:
-                df[col] = df[col] * factor
+                df[col] = df[col].apply(lambda x: safe_multiply(x, factor))
 
         # Add Total column
-        df['Total'] = df[[s for s in sectors if s in df.columns]].sum(axis=1)
+        numeric_cols = [s for s in sectors if s in df.columns]
+        if numeric_cols:
+            df['Total'] = df[numeric_cols].sum(axis=1)
 
         # Format numbers
         for col in df.columns:
@@ -1579,7 +1582,7 @@ def render_sector_line_chart_single(data, unit, sector, state, title_suffix=''):
             if model_data:
                 fig.add_trace(go.Scatter(
                     x=years,
-                    y=[v * factor if v is not None else None for v in model_data],
+                    y=[safe_multiply(v, factor) if v is not None else None for v in model_data],
                     name=model_name,
                     mode='lines+markers',
                     line=dict(
@@ -1593,7 +1596,7 @@ def render_sector_line_chart_single(data, unit, sector, state, title_suffix=''):
         # Add forecast marker line
         if forecast_start_year and forecast_start_year in years:
             y_min = 0
-            y_max = max([max([v for v in model_data if v is not None], default=0) * factor
+            y_max = max([max([safe_numeric(v) for v in model_data if v is not None], default=0) * factor
                         for model_data in models.values()], default=100) * 1.1
 
             fig.add_trace(go.Scatter(
@@ -1696,7 +1699,7 @@ def render_sector_data_table_single(data, unit, sector, title_prefix=''):
         # Build table data
         table_data = {'Year': years}
         for model_name, model_data in models.items():
-            table_data[model_name] = [v * factor if v is not None else 'N/A' for v in model_data]
+            table_data[model_name] = [safe_multiply(v, factor) if v is not None else 'N/A' for v in model_data]
 
         df = pd.DataFrame(table_data)
 

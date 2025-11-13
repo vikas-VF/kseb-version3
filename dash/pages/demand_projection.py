@@ -24,7 +24,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from services.local_service import service as api
-from utils.state_manager import StateManager, ConversionFactors
+from utils.state_manager import StateManager, ConversionFactors, safe_numeric, safe_multiply
 
 
 def layout(active_project=None):
