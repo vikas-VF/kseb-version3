@@ -242,14 +242,204 @@ def layout(active_project=None):
         dcc.Store(id='color-config-store', data={}),
         dcc.Store(id='forecast-process-state', data=None),
 
-        # Interval for SSE polling (alternative to EventSource)
-        dcc.Interval(id='forecast-progress-interval', interval=1000, disabled=True),
+        # NEW: Stores for enhanced forecast configuration (React parity)
+        dcc.Store(id='existing-scenarios-store', data=[]),  # List of existing scenario names
+        dcc.Store(id='sector-metadata-store', data={}),  # Row counts, correlation data per sector
+
+        # SSE control store for real-time forecast progress (React parity)
+        dcc.Store(id='forecast-sse-control', data={'action': 'idle', 'url': ''}),
+
+        # Hidden div for SSE clientside callback output
+        html.Div(id='forecast-sse-status', style={'display': 'none'}),
 
         # Hidden divs for callback outputs (referenced by forecast_callbacks.py)
         html.Div(id='forecast-execution-status', style={'display': 'none'}),
-        html.Div(id='sectors-list-preview', style={'display': 'none'})
+        html.Div(id='sectors-list-preview', style={'display': 'none'}),
+
+        # SSE Handler Script for Demand Forecasting (React parity)
+        html.Script('''
+            // Global EventSource for demand forecasting
+            window.demandForecastEventSource = null;
+
+            // Clientside callback to handle forecast SSE connection
+            if (!window.dash_clientside) { window.dash_clientside = {}; }
+            window.dash_clientside.forecast_sse = {
+                handle_sse: function(sse_control, current_state) {
+                    if (!sse_control || !current_state) {
+                        return [window.dash_clientside.no_update, 'idle'];
+                    }
+
+                    const action = sse_control.action;
+                    const url = sse_control.url;
+
+                    // Close existing connection if any
+                    if (action === 'stop' || action === 'start') {
+                        if (window.demandForecastEventSource) {
+                            window.demandForecastEventSource.close();
+                            window.demandForecastEventSource = null;
+                        }
+                    }
+
+                    // Start new SSE connection
+                    if (action === 'start' && url) {
+                        const eventSource = new EventSource(url);
+                        window.demandForecastEventSource = eventSource;
+
+                        // Connection opened
+                        eventSource.onopen = function() {
+                            console.log('Forecast SSE connection opened');
+                        };
+
+                        // Progress event
+                        eventSource.addEventListener('progress', function(event) {
+                            try {
+                                const data = JSON.parse(event.data);
+                                const newState = {...current_state};
+
+                                if (data.total_sectors) {
+                                    newState.total_sectors = data.total_sectors;
+                                }
+
+                                newState.progress = data.progress || 0;
+                                newState.message = data.message || 'Processing...';
+
+                                if (data.step && data.message && data.sector) {
+                                    newState.logs = [...(newState.logs || []), {
+                                        type: 'progress',
+                                        text: '(' + data.sector + ') - ' + data.message
+                                    }];
+                                }
+
+                                // Update store
+                                if (window.dash_clientside && window.dash_clientside.set_props) {
+                                    window.dash_clientside.set_props('forecast-process-state', {data: newState});
+                                }
+                            } catch (e) {
+                                console.error('Error parsing progress event:', e);
+                            }
+                        });
+
+                        // Sector completed event
+                        eventSource.addEventListener('sector_completed', function(event) {
+                            try {
+                                const data = JSON.parse(event.data);
+                                const newState = {...current_state};
+
+                                newState.current_sector = (newState.current_sector || 0) + 1;
+                                newState.logs = [...(newState.logs || []), {
+                                    type: 'success',
+                                    text: 'Sector \\'' + data.sector + '\\' processed successfully.'
+                                }];
+
+                                // Update store
+                                if (window.dash_clientside && window.dash_clientside.set_props) {
+                                    window.dash_clientside.set_props('forecast-process-state', {data: newState});
+                                }
+                            } catch (e) {
+                                console.error('Error parsing sector_completed event:', e);
+                            }
+                        });
+
+                        // Sector failed event
+                        eventSource.addEventListener('sector_failed', function(event) {
+                            try {
+                                const data = JSON.parse(event.data);
+                                const newState = {...current_state};
+
+                                newState.logs = [...(newState.logs || []), {
+                                    type: 'error',
+                                    text: 'Sector \\'' + data.sector + '\\' failed: ' + data.error
+                                }];
+
+                                // Update store
+                                if (window.dash_clientside && window.dash_clientside.set_props) {
+                                    window.dash_clientside.set_props('forecast-process-state', {data: newState});
+                                }
+                            } catch (e) {
+                                console.error('Error parsing sector_failed event:', e);
+                            }
+                        });
+
+                        // End event
+                        eventSource.addEventListener('end', function(event) {
+                            try {
+                                const data = JSON.parse(event.data);
+                                const newState = {...current_state};
+
+                                if (data.status === 'completed') {
+                                    newState.status = 'completed';
+                                    newState.progress = 100;
+                                    newState.message = 'Forecast process finished!';
+
+                                    if (data.result) {
+                                        const result = data.result;
+                                        const successful = result.successful_sectors || 0;
+                                        const failed = result.failed_sectors || 0;
+                                        newState.logs = [...(newState.logs || []), {
+                                            type: 'success',
+                                            text: '✅ Forecast completed: ' + successful + ' sectors successful, ' + failed + ' failed.'
+                                        }];
+                                    } else {
+                                        newState.logs = [...(newState.logs || []), {
+                                            type: 'success',
+                                            text: '✅ Forecast process completed successfully.'
+                                        }];
+                                    }
+                                } else {
+                                    newState.status = 'failed';
+                                    newState.logs = [...(newState.logs || []), {
+                                        type: 'error',
+                                        text: '❌ Forecast failed: ' + (data.error || 'An unknown error occurred.')
+                                    }];
+                                }
+
+                                eventSource.close();
+
+                                // Update store
+                                if (window.dash_clientside && window.dash_clientside.set_props) {
+                                    window.dash_clientside.set_props('forecast-process-state', {data: newState});
+                                }
+                            } catch (e) {
+                                console.error('Error parsing end event:', e);
+                            }
+                        });
+
+                        // Error handler
+                        eventSource.onerror = function() {
+                            console.error('Forecast SSE connection error');
+                            eventSource.close();
+                            window.demandForecastEventSource = null;
+                        };
+
+                        return [window.dash_clientside.no_update, 'connected'];
+                    }
+
+                    return [window.dash_clientside.no_update, 'idle'];
+                }
+            };
+        ''')
 
     ], fluid=True, style={'padding': '2rem'})
+
+
+# ============================================================================
+# SSE CLIENTSIDE CALLBACK REGISTRATION
+# ============================================================================
+
+from dash import clientside_callback, ClientsideFunction
+
+# Register clientside callback for forecast SSE handling
+clientside_callback(
+    ClientsideFunction(
+        namespace='forecast_sse',
+        function_name='handle_sse'
+    ),
+    Output('forecast-process-state', 'data', allow_duplicate=True),
+    Output('forecast-sse-status', 'children'),
+    Input('forecast-sse-control', 'data'),
+    State('forecast-process-state', 'data'),
+    prevent_initial_call=True
+)
 
 
 # ============================================================================
@@ -1037,6 +1227,93 @@ def initialize_sector_selector(options, current_value):
 # CALLBACKS - CONFIGURE FORECAST MODAL
 # ============================================================================
 
+# NEW: Fetch scenarios and sector metadata when opening configure modal
+@callback(
+    Output('existing-scenarios-store', 'data'),
+    Output('sector-metadata-store', 'data'),
+    Input('open-configure-forecast-btn', 'n_clicks'),
+    State('active-project-store', 'data'),
+    State('sectors-store', 'data'),
+    prevent_initial_call=True
+)
+def fetch_configure_modal_data(n_clicks, active_project, sectors):
+    """
+    Fetch existing scenarios and sector metadata (correlation, row counts)
+    This matches React's useEffect behavior when modal opens
+    """
+    if not n_clicks or not active_project or not sectors:
+        return no_update, no_update
+
+    try:
+        # Fetch existing scenarios for duplicate check
+        scenarios_response = api.get_scenarios(active_project['path'])
+        existing_scenarios = scenarios_response.get('scenarios', [])
+
+        # Fetch metadata for each sector (correlation data and row counts)
+        sector_metadata = {}
+        for sector in sectors:
+            try:
+                # Extract sector data to get row count
+                data_response = api.extract_sector_data(active_project['path'], sector)
+                if data_response.get('success'):
+                    rows = data_response.get('data', [])
+                    row_count = len(rows)
+
+                    # Get correlation analysis for MLR parameters
+                    corr_response = api.get_sector_correlation(active_project['path'], sector)
+                    correlations = []
+                    mlr_params = []
+
+                    if corr_response.get('success'):
+                        # Extract correlation with electricity (excluding Year, Electricity itself)
+                        corr_matrix = corr_response.get('correlation_matrix', {})
+                        electricity_corr = corr_matrix.get('Electricity', {})
+
+                        # Create list of parameters sorted by correlation strength
+                        for param, corr_value in electricity_corr.items():
+                            if param.lower() not in ['year', 'electricity']:
+                                correlations.append({
+                                    'variable': param,
+                                    'correlation': abs(corr_value)  # Use absolute value
+                                })
+
+                        # Sort by correlation strength (highest first)
+                        correlations.sort(key=lambda x: x['correlation'], reverse=True)
+                        mlr_params = [c['variable'] for c in correlations]
+
+                    sector_metadata[sector] = {
+                        'row_count': row_count,
+                        'correlations': correlations,
+                        'mlr_params': mlr_params,  # Available MLR parameters
+                        'max_wam_window': max(3, row_count - 2)  # React formula: rowCount - 2
+                    }
+                else:
+                    # Default values if data extraction fails
+                    sector_metadata[sector] = {
+                        'row_count': 10,
+                        'correlations': [],
+                        'mlr_params': ['GDP', 'Population', 'Income'],  # Fallback
+                        'max_wam_window': 8
+                    }
+
+            except Exception as e:
+                print(f"Error fetching metadata for sector {sector}: {e}")
+                sector_metadata[sector] = {
+                    'row_count': 10,
+                    'correlations': [],
+                    'mlr_params': ['GDP', 'Population', 'Income'],
+                    'max_wam_window': 8
+                }
+
+        return existing_scenarios, sector_metadata
+
+    except Exception as e:
+        print(f"Error fetching configure modal data: {e}")
+        import traceback
+        traceback.print_exc()
+        return [], {}
+
+
 @callback(
     Output('configure-forecast-modal', 'is_open'),
     Output('configure-forecast-modal-content', 'children'),
@@ -1046,9 +1323,11 @@ def initialize_sector_selector(options, current_value):
     State('configure-forecast-modal', 'is_open'),
     State('active-project-store', 'data'),
     State('sectors-store', 'data'),
+    State('existing-scenarios-store', 'data'),
+    State('sector-metadata-store', 'data'),
     prevent_initial_call=True
 )
-def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, active_project, sectors):
+def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, active_project, sectors, existing_scenarios, sector_metadata):
     """Toggle configure forecast modal and render content"""
     ctx = callback_context
     if not ctx.triggered:
@@ -1065,13 +1344,17 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
         if not active_project or not sectors:
             return True, dbc.Alert('Please load a project first.', color='warning')
 
+        # Initialize sector_metadata if None
+        if not sector_metadata:
+            sector_metadata = {}
+
         # Render configure form matching React version exactly
         modal_content = html.Div([
             # Section A: Basic Configuration (3-column grid)
             html.Div([
                 html.H5('Basic Configuration', className='mb-3'),
                 dbc.Row([
-                    # Scenario Name
+                    # Scenario Name with duplicate warning
                     dbc.Col([
                         dbc.Label('Scenario Name *', className='fw-bold'),
                         dbc.Input(
@@ -1079,7 +1362,14 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
                             type='text',
                             placeholder='Project_Demand_V1',
                             value='Project_Demand_V1',
-                            className='mb-3'
+                            className='mb-1'
+                        ),
+                        # Duplicate warning (hidden by default, shown via callback)
+                        html.Div(
+                            id='scenario-name-warning',
+                            children=[],
+                            className='mt-1',
+                            style={'minHeight': '20px'}
                         )
                     ], width=4),
 
@@ -1154,15 +1444,15 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
                                 )
                             ], style={'width': '25%', 'padding': '0.75rem'}),
 
-                            # Column 3: MLR Parameters (conditional dropdown)
+                            # Column 3: MLR Parameters (conditional dropdown) - DYNAMIC from correlation
                             html.Div(
                                 dcc.Dropdown(
                                     id={'type': 'mlr-params', 'sector': idx},
                                     options=[
-                                        {'label': 'GDP', 'value': 'GDP'},
-                                        {'label': 'Population', 'value': 'Population'},
-                                        {'label': 'Income', 'value': 'Income'}
+                                        {'label': param, 'value': param}
+                                        for param in sector_metadata.get(sector, {}).get('mlr_params', ['GDP', 'Population', 'Income'])
                                     ],
+                                    value=sector_metadata.get(sector, {}).get('mlr_params', []),  # AUTO-SELECT all (React parity)
                                     multi=True,
                                     placeholder='Select parameters...',
                                     style={'fontSize': '0.875rem'}
@@ -1171,11 +1461,14 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
                                 id={'type': 'mlr-params-container', 'sector': idx}
                             ),
 
-                            # Column 4: WAM Years (conditional select)
+                            # Column 4: WAM Years (conditional select) - DYNAMIC from row count
                             html.Div(
                                 dcc.Dropdown(
                                     id={'type': 'wam-years', 'sector': idx},
-                                    options=[{'label': str(i), 'value': i} for i in range(3, 11)],
+                                    options=[
+                                        {'label': str(i), 'value': i}
+                                        for i in range(3, sector_metadata.get(sector, {}).get('max_wam_window', 10) + 1)
+                                    ],
                                     value=3,
                                     clearable=False,
                                     style={'fontSize': '0.875rem', 'width': '80px'}
@@ -1204,6 +1497,40 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
     return no_update, no_update
 
 
+# NEW: Callback to show duplicate scenario warning (React parity)
+@callback(
+    Output('scenario-name-warning', 'children'),
+    Input('forecast-scenario-name', 'value'),
+    State('existing-scenarios-store', 'data'),
+    prevent_initial_call=False
+)
+def check_scenario_name_duplicate(scenario_name, existing_scenarios):
+    """
+    Check if scenario name already exists and show warning
+    Matches React behavior: warning only, doesn't block
+    """
+    if not scenario_name or not existing_scenarios:
+        return []
+
+    scenario_name_lower = scenario_name.strip().lower()
+    is_duplicate = any(
+        existing.lower() == scenario_name_lower
+        for existing in existing_scenarios
+    )
+
+    if is_duplicate:
+        return dbc.Alert([
+            html.I(className='bi bi-exclamation-triangle me-2'),
+            html.Span('This scenario name already exists. If you continue, the previous results will be replaced.')
+        ], color='warning', className='py-2 px-3 mb-0', style={'fontSize': '0.8rem'})
+    else:
+        return html.Small(
+            f'Default name "Project_Demand_V1" is pre-filled — you can rename if needed.',
+            className='text-muted',
+            style={'fontSize': '0.75rem'}
+        )
+
+
 # ============================================================================
 # CALLBACKS - START FORECASTING
 # ============================================================================
@@ -1211,7 +1538,7 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
 @callback(
     Output('forecast-progress-modal', 'is_open', allow_duplicate=True),
     Output('forecast-process-state', 'data', allow_duplicate=True),
-    Output('forecast-progress-interval', 'disabled', allow_duplicate=True),
+    Output('forecast-sse-control', 'data', allow_duplicate=True),
     Input('start-forecast-btn', 'n_clicks'),
     State('forecast-scenario-name', 'value'),
     State('forecast-target-year', 'value'),
@@ -1226,7 +1553,7 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
 def start_forecasting(n_clicks, scenario_name, target_year, exclude_covid,
                      sector_models_list, mlr_params_list, wam_years_list,
                      active_project, sectors):
-    """Start forecasting process with React-matched configuration"""
+    """Start forecasting process with SSE real-time tracking (React parity)"""
     if not n_clicks:
         return no_update, no_update, no_update
 
@@ -1275,16 +1602,23 @@ def start_forecasting(n_clicks, scenario_name, target_year, exclude_covid,
             forecast_config
         )
 
-        # Store process ID for tracking
+        # Initialize process state for real-time tracking
         process_state = {
             'process_id': response.get('process_id'),
-            'status': 'completed' if response.get('success') else 'failed',
-            'progress': 100 if response.get('success') else 0,
-            'current_task': response.get('message', 'Forecast completed')
+            'status': 'running',
+            'progress': 0,
+            'message': 'Starting forecast...',
+            'total_sectors': len(sector_configs),
+            'current_sector': 0,
+            'logs': [{'type': 'info', 'text': 'Forecast process started'}]
         }
 
-        # Open progress modal and enable interval for polling
-        return True, process_state, True  # Disable interval since it's complete
+        # Trigger SSE connection for real-time updates (React parity)
+        sse_url = f'{api.base_url}/project/forecast-progress'
+        sse_control = {'action': 'start', 'url': sse_url}
+
+        # Open progress modal and trigger SSE
+        return True, process_state, sse_control
 
     except Exception as e:
         print(f"Error starting forecast: {e}")
@@ -1294,101 +1628,9 @@ def start_forecasting(n_clicks, scenario_name, target_year, exclude_covid,
 
 
 # ============================================================================
-# CALLBACKS - FORECAST PROGRESS TRACKING (SSE Alternative)
+# REMOVED: Old polling callback - replaced with SSE for real-time updates (React parity)
+# SSE provides instant updates without 1-second polling delay via clientside callback
 # ============================================================================
-
-@callback(
-    Output('forecast-progress-content', 'children'),
-    Output('forecast-process-state', 'data', allow_duplicate=True),
-    Output('forecast-progress-interval', 'disabled', allow_duplicate=True),
-    Input('forecast-progress-interval', 'n_intervals'),
-    State('forecast-process-state', 'data'),
-    State('active-project-store', 'data'),
-    prevent_initial_call=True
-)
-def update_forecast_progress(n_intervals, process_state, active_project):
-    """Poll backend for forecast progress updates"""
-    if not process_state or not process_state.get('process_id'):
-        return no_update, no_update, no_update
-
-    try:
-        # Poll progress from backend
-        progress_response = api.get_forecast_progress(
-            active_project['path'],
-            process_state['process_id']
-        )
-
-        status = progress_response.get('status', 'running')
-        progress = progress_response.get('progress', 0)
-        current_task = progress_response.get('current_task', '')
-        logs = progress_response.get('logs', [])
-
-        # Update process state
-        updated_state = {
-            'process_id': process_state['process_id'],
-            'status': status,
-            'progress': progress,
-            'current_task': current_task
-        }
-
-        # Render progress content
-        progress_content = html.Div([
-            # Progress bar
-            html.Div([
-                html.Div([
-                    html.Strong('Progress: '),
-                    html.Span(f'{progress}%')
-                ], className='mb-2'),
-                dbc.Progress(
-                    value=progress,
-                    color='success' if status == 'completed' else 'primary',
-                    striped=True,
-                    animated=status == 'running',
-                    className='mb-3'
-                )
-            ]),
-
-            # Current task
-            html.Div([
-                html.Strong('Current Task: '),
-                html.Span(current_task)
-            ], className='mb-3'),
-
-            # Logs
-            html.Div([
-                html.H6('Process Logs:', className='mb-2'),
-                dbc.Card([
-                    dbc.CardBody([
-                        html.Div([
-                            html.Div(log, className='mb-1', style={'fontSize': '0.875rem'})
-                            for log in logs[-20:]  # Show last 20 logs
-                        ], style={
-                            'maxHeight': '300px',
-                            'overflowY': 'auto',
-                            'fontFamily': 'monospace',
-                            'backgroundColor': '#f8f9fa',
-                            'padding': '0.5rem'
-                        })
-                    ], className='p-2')
-                ])
-            ]),
-
-            # Completion message
-            dbc.Alert([
-                html.H5('✅ Forecast Completed!', className='alert-heading'),
-                html.P('Your demand forecast has been generated successfully.'),
-                dbc.Button('View Results', id='view-forecast-results-btn', color='success')
-            ], color='success', className='mt-3') if status == 'completed' else html.Div()
-        ])
-
-        # Stop interval if completed or failed
-        stop_interval = status in ['completed', 'failed', 'cancelled']
-
-        return progress_content, updated_state, stop_interval
-
-    except Exception as e:
-        print(f"Error fetching progress: {e}")
-        return no_update, no_update, no_update
 
 
 # ============================================================================
@@ -1399,25 +1641,27 @@ def update_forecast_progress(n_intervals, process_state, active_project):
     Output('forecast-progress-modal', 'is_open', allow_duplicate=True),
     Output('floating-process-indicator', 'style', allow_duplicate=True),
     Output('floating-process-indicator', 'children', allow_duplicate=True),
+    Output('forecast-sse-control', 'data', allow_duplicate=True),
     Input('close-progress-modal', 'n_clicks'),
     Input('minimize-progress-modal', 'n_clicks'),
     State('forecast-process-state', 'data'),
     prevent_initial_call=True
 )
 def control_progress_modal(close_clicks, minimize_clicks, process_state):
-    """Control progress modal visibility and floating indicator"""
+    """Control progress modal visibility and floating indicator with SSE cleanup"""
     ctx = callback_context
     if not ctx.triggered:
-        return no_update, no_update, no_update
+        return no_update, no_update, no_update, no_update
 
     button_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
     if button_id == 'close-progress-modal':
-        # Close modal completely
-        return False, {'display': 'none'}, ''
+        # Close modal completely and stop SSE connection
+        sse_control = {'action': 'stop', 'url': ''}
+        return False, {'display': 'none'}, '', sse_control
 
     if button_id == 'minimize-progress-modal':
-        # Minimize modal, show floating indicator
+        # Minimize modal, show floating indicator (keep SSE running)
         if process_state and process_state.get('status') == 'running':
             floating_indicator = dbc.Card([
                 dbc.CardBody([
@@ -1435,9 +1679,9 @@ def control_progress_modal(close_clicks, minimize_clicks, process_state):
                 'boxShadow': '0 4px 6px rgba(0,0,0,0.1)'
             })
 
-            return False, {'display': 'block'}, floating_indicator
+            return False, {'display': 'block'}, floating_indicator, no_update
 
-    return no_update, no_update, no_update
+    return no_update, no_update, no_update, no_update
 
 
 @callback(
