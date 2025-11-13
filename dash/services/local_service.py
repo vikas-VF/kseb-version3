@@ -1008,6 +1008,11 @@ class LocalService:
         """Get SSE URL for forecast progress (matching FastAPI)"""
         return '/api/forecast-progress'
 
+
+    def get_generation_status_url(self) -> str:
+        """Get SSE URL for load profile generation progress"""
+        return '/api/generation-status'
+
     def cancel_forecast(self, process_id: str) -> Dict:
         """Cancel forecast (not applicable for local execution)"""
         return {'success': False, 'error': 'Cannot cancel local execution'}

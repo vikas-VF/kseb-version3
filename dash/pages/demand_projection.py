@@ -680,7 +680,7 @@ def render_consolidated_data_table(data, unit, sectors):
 
         for col in numeric_cols:
             if col in df.columns:
-                df[col] = df[col] * factor
+                df[col] = df[col].apply(lambda x: safe_multiply(x, factor))
 
         # Create custom table with sticky header and first column
         # Table header
@@ -795,7 +795,7 @@ def render_consolidated_area_chart(data, unit, sectors, colors):
             if sector in df.columns:
                 fig.add_trace(go.Scatter(
                     x=df['Year'],
-                    y=df[sector] * factor,
+                    y=df[sector].apply(lambda x: safe_multiply(x, factor)),
                     name=sector,
                     mode='lines',
                     stackgroup='one',
@@ -850,7 +850,7 @@ def render_consolidated_stacked_bar(data, unit, sectors, colors):
             if sector in df.columns:
                 fig.add_trace(go.Bar(
                     x=df['Year'],
-                    y=df[sector] * factor,
+                    y=df[sector].apply(lambda x: safe_multiply(x, factor)),
                     name=sector,
                     marker_color=colors.get(sector, '#ccc'),
                     hovertemplate=f'{sector}<br>Year: %{{x}}<br>Demand: %{{y:.2f}} {ConversionFactors.get_label(unit)}<extra></extra>'
@@ -903,7 +903,7 @@ def render_consolidated_line_chart(data, unit, sectors, colors):
             if sector in df.columns:
                 fig.add_trace(go.Scatter(
                     x=df['Year'],
-                    y=df[sector] * factor,
+                    y=df[sector].apply(lambda x: safe_multiply(x, factor)),
                     name=sector,
                     mode='lines+markers',
                     line=dict(width=2, color=colors.get(sector, '#ccc')),
@@ -958,7 +958,7 @@ def render_sector_data_table(data, unit, sector_idx, sectors):
             if col in df.columns:
                 # Convert to numeric first, handling non-numeric values
                 df[col] = pd.to_numeric(df[col], errors='coerce')
-                df[col] = df[col] * factor
+                df[col] = df[col].apply(lambda x: safe_multiply(x, factor))
 
         # Create custom table with sticky header and first column
         # Table header
@@ -1092,7 +1092,7 @@ def render_sector_line_chart(data, unit, sector_idx, sectors, colors):
 
         fig.add_trace(go.Scatter(
             x=df[year_col],
-            y=df[electricity_col] * factor,
+            y=df[electricity_col].apply(lambda x: safe_multiply(x, factor)),
             name='Electricity Demand',
             mode='lines+markers',
             line=dict(width=3, color=colors.get(sector_name, '#4f46e5')),
