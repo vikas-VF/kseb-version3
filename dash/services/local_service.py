@@ -767,6 +767,12 @@ class LocalService:
             drivers = corr_df.columns.tolist()
             values = corr_df.values.tolist()
 
+            # Create driver-keyed correlation dictionary for easy access
+            # Format: {'Electricity': {'GSDP': 0.928, 'Population': 0.85, ...}, ...}
+            correlation_dict = {}
+            for driver in drivers:
+                correlation_dict[driver] = corr_df[driver].to_dict()
+
             # Extract top correlations (excluding self-correlations)
             top_correlations = []
             for i, driver1 in enumerate(drivers):
@@ -799,7 +805,8 @@ class LocalService:
 
             return {
                 'success': True,
-                'correlation_matrix': {
+                'correlation_matrix': correlation_dict,  # NOW: Dict[driver, Dict[driver, correlation]]
+                'correlation_matrix_raw': {
                     'values': values,
                     'drivers': drivers
                 },

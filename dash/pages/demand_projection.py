@@ -1148,20 +1148,20 @@ def render_sector_correlation(data, sector_idx, sectors, active_project):
             sector_name
         )
 
-        correlation_matrix = correlation_response.get('correlation_matrix', {})
+        correlation_matrix_raw = correlation_response.get('correlation_matrix_raw', {})
         drivers = correlation_response.get('drivers', [])
 
-        if not correlation_matrix or not drivers:
+        if not correlation_matrix_raw or not drivers:
             return dbc.Alert('No correlation data available for this sector.', color='info')
 
         # Create correlation heatmap
         fig = go.Figure(data=go.Heatmap(
-            z=correlation_matrix.get('values', []),
+            z=correlation_matrix_raw.get('values', []),
             x=drivers,
             y=drivers,
             colorscale='RdBu',
             zmid=0,
-            text=correlation_matrix.get('values', []),
+            text=correlation_matrix_raw.get('values', []),
             texttemplate='%{text:.3f}',
             textfont={"size": 10},
             colorbar=dict(title='Correlation')
