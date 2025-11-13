@@ -674,7 +674,7 @@ class LocalService:
     # ==================== COLOR SETTINGS ====================
 
     def get_color_settings(self, project_path: str) -> Dict:
-        """Get color configuration"""
+        """Get color configuration - dynamic based on sectors in Excel"""
         try:
             color_file = os.path.join(project_path, 'color.json')
 
@@ -683,14 +683,28 @@ class LocalService:
                     colors = json.load(f)
                 return {'colors': colors}
 
-            # Return default colors
-            default_colors = {
-                'Residential': '#3b82f6',
-                'Commercial': '#10b981',
-                'Industrial': '#f59e0b',
-                'Agriculture': '#8b5cf6',
-                'Public Lighting': '#ec4899'
-            }
+            # Generate default colors dynamically based on sectors from Excel
+            sectors_result = self.get_sectors(project_path)
+            sectors = sectors_result.get('sectors', [])
+
+            # Default color palette (professional colors for data visualization)
+            default_palette = [
+                '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899',
+                '#06b6d4', '#f43f5e', '#84cc16', '#6366f1', '#eab308',
+                '#14b8a6', '#f97316', '#a855f7', '#22c55e', '#ef4444'
+            ]
+
+            default_colors = {}
+            for idx, sector in enumerate(sectors):
+                # Assign color from palette (cycle if more sectors than colors)
+                default_colors[sector] = default_palette[idx % len(default_palette)]
+
+            # Also add colors for forecast models
+            default_colors['SLR'] = '#3b82f6'  # Blue
+            default_colors['MLR'] = '#10b981'  # Green
+            default_colors['WAM'] = '#f59e0b'  # Orange
+            default_colors['Time Series'] = '#8b5cf6'  # Purple
+
             return {'colors': default_colors}
 
         except Exception as e:

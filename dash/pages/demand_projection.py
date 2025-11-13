@@ -1614,7 +1614,7 @@ def start_forecasting(n_clicks, scenario_name, target_year, exclude_covid,
         }
 
         # Trigger SSE connection for real-time updates (React parity)
-        sse_url = f'{api.base_url}/project/forecast-progress'
+        sse_url = api.get_forecast_status_url()
         sse_control = {'action': 'start', 'url': sse_url}
 
         # Open progress modal and trigger SSE
