@@ -421,55 +421,54 @@ def render_step_1(state, base_years):
 
         # Method Selection Section
         html.H5('Select Method', className='text-uppercase text-muted small mb-3'),
-        dbc.Row([
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardBody([
-                        html.Div([
-                            html.I(className='bi bi-graph-up me-2'),
-                            html.H6('Base Profile Method', className='d-inline')
-                        ], className='mb-2'),
-                        html.P('Extrapolates a profile based on a single historical reference year.',
-                              className='small text-muted mb-3'),
-                        dbc.Collapse(
-                            dbc.Select(
-                                id='base-year-select',
-                                options=[{'label': str(y), 'value': y} for y in base_years] if base_years else [],
-                                value=state.get('baseYear', base_years[0] if base_years else None),
-                                disabled=not base_years
-                            ),
-                            is_open=state.get('selectedMethod') == 'base'
-                        ),
-                        dbc.RadioItems(
-                            id='method-radio',
-                            options=[{'label': '', 'value': 'base'}],
-                            value='base' if state.get('selectedMethod') == 'base' else None,
-                            inline=True
-                        )
-                    ])
-                ], className='h-100 border-primary' if state.get('selectedMethod') == 'base' else 'h-100',
-                   style={'borderWidth': '2px' if state.get('selectedMethod') == 'base' else '1px'})
-            ], md=6),
-            dbc.Col([
-                dbc.Card([
-                    dbc.CardBody([
-                        html.Div([
-                            html.I(className='bi bi-bezier2 me-2'),
-                            html.H6('STL Decomposition', className='d-inline')
-                        ], className='mb-2'),
-                        html.P('Advanced seasonal-trend analysis for better accuracy.',
-                              className='small text-muted mb-3'),
-                        dbc.RadioItems(
-                            id='method-radio',
-                            options=[{'label': '', 'value': 'stl'}],
-                            value='stl' if state.get('selectedMethod') == 'stl' else None,
-                            inline=True
-                        )
-                    ])
-                ], className='h-100 border-primary' if state.get('selectedMethod') == 'stl' else 'h-100',
-                   style={'borderWidth': '2px' if state.get('selectedMethod') == 'stl' else '1px'})
-            ], md=6)
-        ])
+
+        # Single RadioItems for method selection (fixes duplicate ID issue)
+        dbc.RadioItems(
+            id='method-radio',
+            options=[
+                {'label': 'Base Profile Method', 'value': 'base'},
+                {'label': 'STL Decomposition', 'value': 'stl'}
+            ],
+            value=state.get('selectedMethod', 'base'),
+            inline=False,
+            className='mb-3'
+        ),
+
+        # Conditional display based on selected method
+        dbc.Collapse(
+            dbc.Card([
+                dbc.CardBody([
+                    html.Div([
+                        html.I(className='bi bi-graph-up me-2'),
+                        html.H6('Base Profile Method', className='d-inline')
+                    ], className='mb-2'),
+                    html.P('Extrapolates a profile based on a single historical reference year.',
+                          className='small text-muted mb-3'),
+                    dbc.Label('Select Base Year:', className='fw-bold mb-2'),
+                    dbc.Select(
+                        id='base-year-select',
+                        options=[{'label': str(y), 'value': y} for y in base_years] if base_years else [],
+                        value=state.get('baseYear', base_years[0] if base_years else None),
+                        disabled=not base_years
+                    )
+                ])
+            ], className='border-primary', style={'borderWidth': '2px'}),
+            is_open=state.get('selectedMethod') == 'base'
+        ),
+
+        dbc.Collapse(
+            dbc.Card([
+                dbc.CardBody([
+                    html.Div([
+                        html.I(className='bi bi-bezier2 me-2'),
+                        html.H6('STL Decomposition', className='d-inline')
+                    ], className='mb-2'),
+                    html.P('Advanced seasonal-trend analysis for better accuracy. This method uses historical data patterns to generate more accurate profiles.',
+                          className='small text-muted mb-3')
+                ])
+            ], className='border-primary', style={'borderWidth': '2px'}),
+            is_open=state.get('selectedMethod') == 'stl'
+        )
     ])
 
 

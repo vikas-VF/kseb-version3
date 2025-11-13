@@ -78,7 +78,7 @@ def layout(active_project=None):
     Output('profile-select', 'value'),
     Input('active-project-store', 'data'),
     State('profiles-state', 'data'),
-    prevent_initial_call=True
+    prevent_initial_call=False
 )
 def load_profiles(project, profiles_state):
     if not project:

@@ -25,6 +25,11 @@ from dash.exceptions import PreventUpdate
 import plotly.graph_objects as go
 import json
 import pandas as pd
+import sys, os
+
+# Import local service instead of API client
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from services.local_service import service as api
 
 # Note: This page uses manual routing in app.py, not dash.register_page()
 
@@ -264,8 +269,6 @@ def render_folder_selector(results_state, active_project):
     if results_state.get('viewMode') != 'excel':
         return html.Div()
 
-    from dash.services.api_client import get_api_client
-    api = get_api_client()
 
     try:
         response = api.get_optimization_folders(active_project['path'])
@@ -300,8 +303,6 @@ def load_sheets(folder, results_state, active_project):
 
     results_state['selectedFolder'] = folder
 
-    from dash.services.api_client import get_api_client
-    api = get_api_client()
 
     try:
         response = api.get_optimization_sheets(active_project['path'], folder)
@@ -395,8 +396,6 @@ def render_excel_chart(results_state, active_project):
     if not folder or not sheet:
         return html.Div()
 
-    from dash.services.api_client import get_api_client
-    api = get_api_client()
 
     try:
         response = api.get_optimization_sheet_data(active_project['path'], folder, sheet)
@@ -462,8 +461,6 @@ def render_network_selector(results_state, active_project):
     if results_state.get('viewMode') != 'network':
         return html.Div()
 
-    from dash.services.api_client import get_api_client
-    api = get_api_client()
 
     try:
         response = api.get_pypsa_scenarios(active_project['path'])
@@ -508,8 +505,6 @@ def load_networks(scenario, results_state, active_project):
 
     results_state['selectedScenario'] = scenario
 
-    from dash.services.api_client import get_api_client
-    api = get_api_client()
 
     try:
         response = api.get_pypsa_networks(active_project['path'], scenario)
@@ -682,8 +677,6 @@ def render_dispatch_chart(results_state, active_project):
     network = results_state.get('selectedNetwork')
     resolution = results_state.get('resolution', '1H')
 
-    from dash.services.api_client import get_api_client
-    api = get_api_client()
 
     try:
         response = api.get_pypsa_dispatch(active_project['path'], scenario, network, resolution)
@@ -748,8 +741,6 @@ def render_capacity_tab(results_state, active_project):
     scenario = results_state.get('selectedScenario')
     network = results_state.get('selectedNetwork')
 
-    from dash.services.api_client import get_api_client
-    api = get_api_client()
 
     try:
         response = api.get_pypsa_capacity(active_project['path'], scenario, network)
@@ -826,8 +817,6 @@ def render_metrics_tab(results_state, active_project):
     scenario = results_state.get('selectedScenario')
     network = results_state.get('selectedNetwork')
 
-    from dash.services.api_client import get_api_client
-    api = get_api_client()
 
     try:
         response = api.get_pypsa_renewable_share(active_project['path'], scenario, network)
@@ -925,8 +914,6 @@ def render_storage_tab(results_state, active_project):
     scenario = results_state.get('selectedScenario')
     network = results_state.get('selectedNetwork')
 
-    from dash.services.api_client import get_api_client
-    api = get_api_client()
 
     try:
         response = api.get_pypsa_storage(active_project['path'], scenario, network)
@@ -1019,8 +1006,6 @@ def render_emissions_tab(results_state, active_project):
     scenario = results_state.get('selectedScenario')
     network = results_state.get('selectedNetwork')
 
-    from dash.services.api_client import get_api_client
-    api = get_api_client()
 
     try:
         response = api.get_pypsa_emissions(active_project['path'], scenario, network)
@@ -1089,8 +1074,6 @@ def render_costs_tab(results_state, active_project):
     scenario = results_state.get('selectedScenario')
     network = results_state.get('selectedNetwork')
 
-    from dash.services.api_client import get_api_client
-    api = get_api_client()
 
     try:
         response = api.get_pypsa_system_costs(active_project['path'], scenario, network)
@@ -1150,8 +1133,6 @@ def render_network_tab(results_state, active_project):
     scenario = results_state.get('selectedScenario')
     network = results_state.get('selectedNetwork')
 
-    from dash.services.api_client import get_api_client
-    api = get_api_client()
 
     try:
         response = api.get_pypsa_lines(active_project['path'], scenario, network)
