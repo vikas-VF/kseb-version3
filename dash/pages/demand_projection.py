@@ -951,14 +951,21 @@ def render_sector_data_table(data, unit, sector_idx, sectors):
 
         # Apply unit conversion ONLY to Electricity columns
         factor = ConversionFactors.FACTORS.get(unit, 1)
-        electricity_cols = [col for col in df.columns
-                           if 'electricity' in col.lower() and col.lower() not in ['year']]
 
+        # Find electricity columns (case-insensitive, exact match or contains 'electricity')
+        electricity_cols = []
+        for col in df.columns:
+            col_lower = str(col).lower()
+            # Match: exact 'electricity' or contains 'electricity' (but not 'year')
+            if col_lower == 'electricity' or ('electricity' in col_lower and 'year' not in col_lower):
+                electricity_cols.append(col)
+
+        # Apply conversion to all electricity columns
         for col in electricity_cols:
-            if col in df.columns:
-                # Convert to numeric first, handling non-numeric values
-                df[col] = pd.to_numeric(df[col], errors='coerce')
-                df[col] = df[col].apply(lambda x: safe_multiply(x, factor))
+            # Convert to numeric first, handling non-numeric values
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+            # Apply unit conversion factor
+            df[col] = df[col] * factor  # Direct multiplication (NaN-safe)
 
         # Create custom table with sticky header and first column
         # Table header
