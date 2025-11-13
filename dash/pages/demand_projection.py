@@ -1398,17 +1398,18 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
         modal_content = html.Div([
             # Section A: Basic Configuration (3-column grid)
             html.Div([
-                html.H5('Basic Configuration', className='mb-3'),
+                html.H5('📋 Basic Configuration', className='mb-3', style={'fontWeight': '600', 'color': '#0f172a'}),
                 dbc.Row([
                     # Scenario Name with duplicate warning
                     dbc.Col([
-                        dbc.Label('Scenario Name *', className='fw-bold'),
+                        dbc.Label('Scenario Name *', className='fw-semibold', style={'fontSize': '0.875rem', 'color': '#475569'}),
                         dbc.Input(
                             id='forecast-scenario-name',
                             type='text',
                             placeholder='Project_Demand_V1',
                             value='Project_Demand_V1',
-                            className='mb-1'
+                            className='mb-1',
+                            style={'fontSize': '0.875rem'}
                         ),
                         # Duplicate warning (hidden by default, shown via callback)
                         html.Div(
@@ -1421,49 +1422,91 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
 
                     # Projection Year
                     dbc.Col([
-                        dbc.Label('Projection Year *', className='fw-bold'),
+                        dbc.Label('Projection Year *', className='fw-semibold', style={'fontSize': '0.875rem', 'color': '#475569'}),
                         dbc.Input(
                             id='forecast-target-year',
                             type='number',
                             placeholder='2050',
                             min=2025,
                             max=2100,
-                            className='mb-3'
+                            className='mb-3',
+                            style={'fontSize': '0.875rem'}
                         )
                     ], width=4),
 
                     # Exclude COVID Years
                     dbc.Col([
-                        dbc.Label('Data Options', className='fw-bold'),
+                        dbc.Label('Data Options', className='fw-semibold', style={'fontSize': '0.875rem', 'color': '#475569'}),
                         dbc.Checklist(
                             id='forecast-exclude-covid',
                             options=[
                                 {'label': ' Exclude COVID-19 Years (FY 2021-2023)', 'value': 'exclude_covid'}
                             ],
                             value=['exclude_covid'],  # Default: checked
-                            className='mt-2'
+                            className='mt-2',
+                            style={'fontSize': '0.875rem'}
                         )
                     ], width=4)
                 ], className='mb-4')
-            ], className='p-3', style={'backgroundColor': '#f8fafc', 'borderRadius': '0.5rem', 'marginBottom': '1rem'}),
+            ], className='p-4', style={
+                'backgroundColor': '#f8fafc',
+                'borderRadius': '0.75rem',
+                'marginBottom': '1.5rem',
+                'border': '1px solid #e2e8f0'
+            }),
 
             # Section B: Sector-wise Forecast Configuration Table
             html.Div([
-                html.H5('Sector-wise Forecast Configuration', className='mb-3'),
+                html.H5('⚙️ Sector-wise Forecast Configuration', className='mb-3', style={'fontWeight': '600', 'color': '#0f172a'}),
+                html.P('Configure forecasting models and parameters for each sector',
+                       className='text-muted mb-3',
+                       style={'fontSize': '0.875rem'}),
 
                 # Table
                 html.Div([
                     # Table header
                     html.Div([
-                        html.Div('Sector / Category', style={'width': '20%', 'fontWeight': '600', 'padding': '0.75rem'}),
-                        html.Div('Forecasting Models', style={'width': '25%', 'fontWeight': '600', 'padding': '0.75rem'}),
-                        html.Div('MLR Input Parameters', style={'width': '40%', 'fontWeight': '600', 'padding': '0.75rem'}),
-                        html.Div('Years for WAM', style={'width': '15%', 'fontWeight': '600', 'padding': '0.75rem'})
+                        html.Div('Sector / Category', style={
+                            'width': '20%',
+                            'fontWeight': '600',
+                            'padding': '0.875rem',
+                            'fontSize': '0.875rem',
+                            'color': '#475569',
+                            'textTransform': 'uppercase',
+                            'letterSpacing': '0.05em'
+                        }),
+                        html.Div('Forecasting Models', style={
+                            'width': '25%',
+                            'fontWeight': '600',
+                            'padding': '0.875rem',
+                            'fontSize': '0.875rem',
+                            'color': '#475569',
+                            'textTransform': 'uppercase',
+                            'letterSpacing': '0.05em'
+                        }),
+                        html.Div('MLR Input Parameters', style={
+                            'width': '40%',
+                            'fontWeight': '600',
+                            'padding': '0.875rem',
+                            'fontSize': '0.875rem',
+                            'color': '#475569',
+                            'textTransform': 'uppercase',
+                            'letterSpacing': '0.05em'
+                        }),
+                        html.Div('Years for WAM', style={
+                            'width': '15%',
+                            'fontWeight': '600',
+                            'padding': '0.875rem',
+                            'fontSize': '0.875rem',
+                            'color': '#475569',
+                            'textTransform': 'uppercase',
+                            'letterSpacing': '0.05em'
+                        })
                     ], style={
                         'display': 'flex',
-                        'backgroundColor': '#e2e8f0',
+                        'backgroundColor': '#f1f5f9',
                         'borderBottom': '2px solid #cbd5e1',
-                        'borderRadius': '0.375rem 0.375rem 0 0'
+                        'borderRadius': '0.5rem 0.5rem 0 0'
                     }),
 
                     # Table rows - one per sector
@@ -1472,7 +1515,13 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
                             # Column 1: Sector Name
                             html.Div(
                                 sector,
-                                style={'width': '20%', 'padding': '0.75rem', 'fontWeight': '500'}
+                                style={
+                                    'width': '20%',
+                                    'padding': '0.875rem',
+                                    'fontWeight': '600',
+                                    'fontSize': '0.875rem',
+                                    'color': '#0f172a'
+                                }
                             ),
 
                             # Column 2: Forecasting Models (multi-select)
@@ -1480,15 +1529,16 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
                                 dbc.Checklist(
                                     id={'type': 'sector-models', 'sector': idx},
                                     options=[
-                                        {'label': 'SLR', 'value': 'SLR'},
-                                        {'label': 'MLR', 'value': 'MLR'},
-                                        {'label': 'WAM', 'value': 'WAM'}
+                                        {'label': ' SLR', 'value': 'SLR'},
+                                        {'label': ' MLR', 'value': 'MLR'},
+                                        {'label': ' WAM', 'value': 'WAM'}
                                     ],
                                     value=['SLR', 'MLR', 'WAM'],  # Default: All selected
                                     inline=True,
-                                    className='mb-0'
+                                    className='mb-0',
+                                    style={'fontSize': '0.875rem'}
                                 )
-                            ], style={'width': '25%', 'padding': '0.75rem'}),
+                            ], style={'width': '25%', 'padding': '0.875rem'}),
 
                             # Column 3: MLR Parameters (conditional dropdown) - DYNAMIC from correlation
                             html.Div(
@@ -1496,14 +1546,14 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
                                     id={'type': 'mlr-params', 'sector': idx},
                                     options=[
                                         {'label': param, 'value': param}
-                                        for param in sector_metadata.get(sector, {}).get('mlr_params', ['GDP', 'Population', 'Income'])
+                                        for param in sector_metadata.get(sector, {}).get('mlr_params', [])
                                     ],
-                                    value=sector_metadata.get(sector, {}).get('mlr_params', []),  # AUTO-SELECT all (React parity)
+                                    value=sector_metadata.get(sector, {}).get('mlr_params', []),  # AUTO-SELECT all
                                     multi=True,
                                     placeholder='Select parameters...',
                                     style={'fontSize': '0.875rem'}
                                 ),
-                                style={'width': '40%', 'padding': '0.75rem'},
+                                style={'width': '40%', 'padding': '0.875rem'},
                                 id={'type': 'mlr-params-container', 'sector': idx}
                             ),
 
@@ -1517,26 +1567,32 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
                                     ],
                                     value=3,
                                     clearable=False,
-                                    style={'fontSize': '0.875rem', 'width': '80px'}
+                                    style={'fontSize': '0.875rem', 'width': '90px'}
                                 ),
-                                style={'width': '15%', 'padding': '0.75rem'},
+                                style={'width': '15%', 'padding': '0.875rem'},
                                 id={'type': 'wam-years-container', 'sector': idx}
                             )
                         ], style={
                             'display': 'flex',
                             'alignItems': 'center',
-                            'borderBottom': '1px solid #e2e8f0',
-                            'backgroundColor': '#ffffff' if idx % 2 == 0 else '#f8fafc'
+                            'borderBottom': '1px solid #f1f5f9',
+                            'backgroundColor': '#ffffff' if idx % 2 == 0 else '#f8fafc',
+                            'transition': 'background-color 0.15s ease'
                         })
                         for idx, sector in enumerate(sectors)
-                    ])
+                    ], style={'maxHeight': '400px', 'overflowY': 'auto'})
                 ], style={
                     'border': '1px solid #e2e8f0',
-                    'borderRadius': '0.375rem',
-                    'overflow': 'hidden'
+                    'borderRadius': '0.5rem',
+                    'overflow': 'hidden',
+                    'boxShadow': '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
                 })
-            ], className='p-3')
-        ], style={'maxHeight': '65vh', 'overflowY': 'auto'})
+            ], className='p-4', style={
+                'backgroundColor': 'white',
+                'borderRadius': '0.75rem',
+                'border': '1px solid #e2e8f0'
+            })
+        ], style={'maxHeight': '70vh', 'overflowY': 'auto'})
 
         return True, modal_content
 
