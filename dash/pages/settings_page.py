@@ -320,13 +320,13 @@ def create_color_grid(items_dict, item_type):
     })
 
 
-# Callback to save color settings
+# Callback to save color settings (with allow_duplicate for shared outputs)
 @callback(
     Output('settings-save-status-store', 'data'),
     Output('settings-toast', 'children'),
-    Output('save-settings-btn', 'style'),
-    Output('settings-save-icon', 'className'),
-    Output('settings-save-text', 'children'),
+    Output('save-settings-btn', 'style', allow_duplicate=True),
+    Output('settings-save-icon', 'className', allow_duplicate=True),
+    Output('settings-save-text', 'children', allow_duplicate=True),
     Output('color-settings-store', 'data'),
     Input('save-settings-btn', 'n_clicks'),
     State('active-project-store', 'data'),

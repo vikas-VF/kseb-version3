@@ -140,15 +140,193 @@ def layout(active_project=None):
             'modalMinimized': False
         }),
 
-        # Interval for polling generation progress
-        dcc.Interval(
-            id='generation-progress-interval',
-            interval=1000,  # Check every second
-            disabled=True,
-            n_intervals=0
-        )
+        # SSE control store (triggers SSE connection start/stop)
+        dcc.Store(id='sse-control-store', data={'action': 'idle', 'url': ''}),
+
+        # Hidden div for SSE clientside callback output
+        html.Div(id='sse-connection-status', style={'display': 'none'}),
+
+        # SSE Handler Script (clientside callback in JavaScript)
+        html.Script('''
+            // Global EventSource instance
+            window.profileGenerationEventSource = null;
+
+            // Clientside callback to handle SSE connection
+            if (!window.dash_clientside) { window.dash_clientside = {}; }
+            window.dash_clientside.generation_sse = {
+                handle_sse: function(sse_control, current_process_state) {
+                    if (!sse_control || !current_process_state) {
+                        return [window.dash_clientside.no_update, 'idle'];
+                    }
+
+                    const action = sse_control.action;
+                    const url = sse_control.url;
+
+                    // Close existing connection if any
+                    if (action === 'stop' || action === 'start') {
+                        if (window.profileGenerationEventSource) {
+                            window.profileGenerationEventSource.close();
+                            window.profileGenerationEventSource = null;
+                        }
+                    }
+
+                    // Start new SSE connection
+                    if (action === 'start' && url) {
+                        const eventSource = new EventSource(url);
+                        window.profileGenerationEventSource = eventSource;
+
+                        eventSource.onmessage = function(event) {
+                            try {
+                                const log = event.data;
+
+                                // Clean up log text
+                                let cleanLog = log.replace(/^\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2},\\d{3}\\s+-\\s+\\w+\\s+-\\s+\\[Profile Generation (STDERR|STDOUT)\\]:\\s+/, '');
+
+                                // Skip empty logs
+                                if (!cleanLog.trim() || /^=+$/.test(cleanLog.trim())) {
+                                    return;
+                                }
+
+                                // Get current timestamp
+                                const now = new Date();
+                                const timeStr = now.toTimeString().split(' ')[0];
+
+                                // Create new process state
+                                const newState = {...current_process_state};
+
+                                // Parse different log types
+                                if (log.includes('PROGRESS:')) {
+                                    const jsonStart = log.indexOf('{');
+                                    if (jsonStart !== -1) {
+                                        try {
+                                            const progressData = JSON.parse(log.substring(jsonStart));
+                                            newState.message = progressData.message || 'Processing...';
+                                            if (progressData.percentage !== undefined) {
+                                                newState.percentage = progressData.percentage;
+                                            }
+                                            newState.logs = [...(newState.logs || []), {
+                                                time: timeStr,
+                                                type: 'progress',
+                                                text: progressData.message || cleanLog
+                                            }];
+                                        } catch (e) {
+                                            console.error('Error parsing progress JSON:', e);
+                                        }
+                                    }
+                                } else if (log.includes('YEAR_PROGRESS:')) {
+                                    const match = log.match(/Processing FY(\\d+) \\((\\d+)\\/(\\d+)\\)/);
+                                    if (match) {
+                                        const year = match[1];
+                                        const current = parseInt(match[2], 10);
+                                        const total = parseInt(match[3], 10);
+
+                                        if (total > 0) {
+                                            const basePercentage = 5;
+                                            const workRange = 94;
+                                            const calculatedPercentage = basePercentage + (current / total) * workRange;
+                                            newState.percentage = Math.min(99, calculatedPercentage);
+                                            newState.message = `Processing FY${year} (${current}/${total})`;
+                                            newState.taskProgress = `${current}/${total} years`;
+                                        }
+
+                                        newState.logs = [...(newState.logs || []), {
+                                            time: timeStr,
+                                            type: 'progress',
+                                            text: `Processing FY${year} (${current}/${total} years)`
+                                        }];
+                                    }
+                                } else if (log.includes('GENERATION COMPLETE') || log.includes('Generation completed successfully')) {
+                                    newState.isRunning = false;
+                                    newState.status = 'completed';
+                                    newState.percentage = 100;
+                                    newState.message = 'Profile generation completed!';
+                                    newState.logs = [...(newState.logs || []), {
+                                        time: timeStr,
+                                        type: 'success',
+                                        text: '✅ Load profile generation completed successfully!'
+                                    }];
+                                    eventSource.close();
+                                } else if (log.includes('FAILED') && log.includes('profile generation')) {
+                                    newState.isRunning = false;
+                                    newState.status = 'failed';
+                                    newState.logs = [...(newState.logs || []), {
+                                        time: timeStr,
+                                        type: 'error',
+                                        text: '❌ Profile generation failed'
+                                    }];
+                                    eventSource.close();
+                                } else {
+                                    // Determine log type
+                                    let logType = 'info';
+                                    if (cleanLog.includes('✓') || cleanLog.includes('✅') || cleanLog.includes('successfully') || cleanLog.includes('completed')) {
+                                        logType = 'success';
+                                    } else if (cleanLog.includes('Processing') || cleanLog.includes('Generating') || cleanLog.includes('Loading') || cleanLog.includes('Extracting')) {
+                                        logType = 'progress';
+                                    } else if (cleanLog.includes('Warning') || cleanLog.includes('Note:')) {
+                                        logType = 'warning';
+                                    }
+
+                                    newState.logs = [...(newState.logs || []), {
+                                        time: timeStr,
+                                        type: logType,
+                                        text: cleanLog
+                                    }];
+                                }
+
+                                // Keep last 50 logs
+                                if (newState.logs && newState.logs.length > 50) {
+                                    newState.logs = newState.logs.slice(-50);
+                                }
+
+                                // Trigger update by setting store data
+                                const storeDiv = document.getElementById('generation-process-state');
+                                if (storeDiv && storeDiv._dashprivate_layout && storeDiv._dashprivate_layout.props) {
+                                    storeDiv._dashprivate_layout.props.data = newState;
+                                    // Trigger Dash callback
+                                    if (window.dash_clientside && window.dash_clientside.set_props) {
+                                        window.dash_clientside.set_props('generation-process-state', {data: newState});
+                                    }
+                                }
+                            } catch (error) {
+                                console.error('Error processing SSE message:', error);
+                            }
+                        };
+
+                        eventSource.onerror = function() {
+                            console.error('SSE connection error');
+                            eventSource.close();
+                            window.profileGenerationEventSource = null;
+                        };
+
+                        return [window.dash_clientside.no_update, 'connected'];
+                    }
+
+                    return [window.dash_clientside.no_update, 'idle'];
+                }
+            };
+        ''')
 
     ], fluid=True, className='p-4')
+
+
+# =====================================================
+# SSE CLIENTSIDE CALLBACK REGISTRATION
+# =====================================================
+
+from dash import clientside_callback, ClientsideFunction
+
+# Register clientside callback for SSE handling
+clientside_callback(
+    ClientsideFunction(
+        namespace='generation_sse',
+        function_name='handle_sse'
+    ),
+    Output('generation-process-state', 'data', allow_duplicate=True),
+    Output('sse-connection-status', 'children'),
+    Input('sse-control-store', 'data'),
+    State('generation-process-state', 'data'),
+    prevent_initial_call=True
+)
 
 
 # =====================================================
@@ -645,11 +823,11 @@ def go_next(n_clicks, state):
     return no_update
 
 
-# Generate button - start generation
+# Generate button - start generation with SSE
 @callback(
     Output('generation-process-state', 'data', allow_duplicate=True),
     Output('generate-progress-modal', 'is_open', allow_duplicate=True),
-    Output('generation-progress-interval', 'disabled', allow_duplicate=True),
+    Output('sse-control-store', 'data', allow_duplicate=True),
     Input('wizard-generate-btn', 'n_clicks'),
     State('wizard-state', 'data'),
     State('active-project-store', 'data'),
@@ -698,7 +876,11 @@ def start_generation(n_clicks, wizard_state, active_project):
             'modalMinimized': False
         }
 
-        return process_state, True, False  # Enable interval
+        # Trigger SSE connection (React parity)
+        sse_url = api.get_generation_status_url()
+        sse_control = {'action': 'start', 'url': sse_url}
+
+        return process_state, True, sse_control
     except Exception as e:
         process_state = {
             'isRunning': False,
@@ -706,72 +888,11 @@ def start_generation(n_clicks, wizard_state, active_project):
             'logs': [{'time': datetime.now().strftime('%H:%M:%S'), 'type': 'error', 'text': f'Failed to start: {str(e)}'}],
             'modalVisible': True
         }
-        return process_state, True, True  # Keep interval disabled
+        return process_state, True, no_update
 
 
-# Poll generation status
-@callback(
-    Output('generation-process-state', 'data', allow_duplicate=True),
-    Output('generation-progress-interval', 'disabled', allow_duplicate=True),
-    Input('generation-progress-interval', 'n_intervals'),
-    State('generation-process-state', 'data'),
-    State('active-project-store', 'data'),
-    prevent_initial_call=True
-)
-def poll_generation_status(n_intervals, process_state, active_project):
-    if not process_state.get('isRunning') or not active_project:
-        return no_update, True  # Stop polling
-
-    try:
-        # Get generation status from backend
-        response = api.get_generation_status(active_project['path'])
-
-        if response.get('status') == 'completed':
-            process_state['isRunning'] = False
-            process_state['status'] = 'completed'
-            process_state['percentage'] = 100
-            process_state['message'] = 'Profile generation completed!'
-            process_state['logs'].append({
-                'time': datetime.now().strftime('%H:%M:%S'),
-                'type': 'success',
-                'text': '✅ Load profile generation completed successfully!'
-            })
-            return process_state, True  # Stop polling
-
-        elif response.get('status') == 'failed':
-            process_state['isRunning'] = False
-            process_state['status'] = 'failed'
-            process_state['logs'].append({
-                'time': datetime.now().strftime('%H:%M:%S'),
-                'type': 'error',
-                'text': '❌ Profile generation failed'
-            })
-            return process_state, True  # Stop polling
-
-        # Update progress
-        if 'percentage' in response:
-            process_state['percentage'] = min(99, response['percentage'])
-        if 'message' in response:
-            process_state['message'] = response['message']
-        if 'taskProgress' in response:
-            process_state['taskProgress'] = response['taskProgress']
-
-        # Add new logs
-        if 'log' in response and response['log']:
-            log_entry = {
-                'time': datetime.now().strftime('%H:%M:%S'),
-                'type': 'info',
-                'text': response['log']
-            }
-            process_state['logs'].append(log_entry)
-            # Keep last 50 logs
-            process_state['logs'] = process_state['logs'][-50:]
-
-        return process_state, False  # Continue polling
-
-    except Exception as e:
-        print(f"Error polling generation status: {e}")
-        return process_state, False  # Continue polling
+# REMOVED: Old polling callback - replaced with SSE for real-time updates (React parity)
+# SSE provides instant updates without 1-second polling delay
 
 
 # Update progress modal UI
@@ -873,11 +994,12 @@ def update_floating_indicator(process_state):
         return {'display': 'none'}, None
 
 
-# Close modal button with AUTO-NAVIGATION (React parity)
+# Close modal button with AUTO-NAVIGATION and SSE cleanup (React parity)
 @callback(
     Output('generate-progress-modal', 'is_open', allow_duplicate=True),
     Output('generation-process-state', 'data', allow_duplicate=True),
     Output('selected-page-store', 'data', allow_duplicate=True),
+    Output('sse-control-store', 'data', allow_duplicate=True),
     Input('close-generate-modal-btn', 'n_clicks'),
     State('generation-process-state', 'data'),
     State('url', 'pathname'),
@@ -885,7 +1007,10 @@ def update_floating_indicator(process_state):
 )
 def close_modal_and_navigate(n_clicks, process_state, current_path):
     if not n_clicks:
-        return no_update, no_update, no_update
+        return no_update, no_update, no_update, no_update
+
+    # Stop SSE connection when closing modal
+    sse_control = {'action': 'stop', 'url': ''}
 
     # If completed, navigate to analyze page (AUTO-NAVIGATION)
     if process_state.get('status') == 'completed':
@@ -901,8 +1026,8 @@ def close_modal_and_navigate(n_clicks, process_state, current_path):
             'modalMinimized': False
         }
         # Navigate to Analyze Profiles page ✅
-        return False, process_state, 'Analyze Profiles'
+        return False, process_state, 'Analyze Profiles', sse_control
 
     # Otherwise just close
     process_state['modalVisible'] = False
-    return False, process_state, no_update
+    return False, process_state, no_update, sse_control
