@@ -496,7 +496,7 @@ def render_network_selector(results_state, active_project):
         State('pypsa-results-state', 'data'),
         State('active-project-store', 'data')
     ],
-    prevent_initial_call=False
+    prevent_initial_call=True
 )
 def load_networks(scenario, results_state, active_project):
     """Load networks for selected scenario."""

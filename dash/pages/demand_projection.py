@@ -1604,7 +1604,7 @@ def toggle_configure_modal(open_clicks, cancel_clicks, start_clicks, is_open, ac
     Output('scenario-name-warning', 'children'),
     Input('forecast-scenario-name', 'value'),
     State('existing-scenarios-store', 'data'),
-    prevent_initial_call=False
+    prevent_initial_call=True
 )
 def check_scenario_name_duplicate(scenario_name, existing_scenarios):
     """

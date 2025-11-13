@@ -677,7 +677,7 @@ def update_button_visibility(state):
     Input('profile-name-input', 'value'),
     State('wizard-state', 'data'),
     State('active-project-store', 'data'),
-    prevent_initial_call=False
+    prevent_initial_call=True
 )
 def validate_profile_name(profile_name, state, active_project):
     if not profile_name or not active_project:
@@ -704,7 +704,7 @@ def validate_profile_name(profile_name, state, active_project):
     Input('projection-scenario-select', 'value'),
     Input('constraint-radio', 'value'),
     State('wizard-state', 'data'),
-    prevent_initial_call=False
+    prevent_initial_call=True
 )
 def update_wizard_state(start_year, end_year, method, base_year, source, scenario, constraint, state):
     ctx = callback_context
@@ -737,7 +737,7 @@ def update_wizard_state(start_year, end_year, method, base_year, source, scenari
     Output('available-base-years', 'data'),
     Input('method-radio', 'value'),
     State('active-project-store', 'data'),
-    prevent_initial_call=False
+    prevent_initial_call=True
 )
 def load_base_years(method, active_project):
     if method != 'base' or not active_project:
@@ -755,7 +755,7 @@ def load_base_years(method, active_project):
     Output('available-scenarios', 'data'),
     Input('source-radio', 'value'),
     State('active-project-store', 'data'),
-    prevent_initial_call=False
+    prevent_initial_call=True
 )
 def load_scenarios(source, active_project):
     if source != 'projection' or not active_project:
@@ -935,7 +935,7 @@ def update_progress_ui(process_state):
     Input('minimize-generate-modal-btn', 'n_clicks'),
     Input('generate-floating-indicator', 'n_clicks'),
     State('generation-process-state', 'data'),
-    prevent_initial_call=False
+    prevent_initial_call=True
 )
 def toggle_modal_minimize(minimize_n, indicator_n, process_state):
     ctx = callback_context

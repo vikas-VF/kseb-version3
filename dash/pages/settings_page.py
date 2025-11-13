@@ -153,7 +153,7 @@ def layout():
     Output('model-colors-grid', 'children'),
     Input('active-project-store', 'data'),
     State('color-settings-store', 'data'),
-    prevent_initial_call=False
+    prevent_initial_call=True
 )
 def load_color_configuration(active_project, current_color_settings):
     """Load sectors and initialize color pickers"""
