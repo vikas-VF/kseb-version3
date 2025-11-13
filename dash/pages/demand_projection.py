@@ -1288,20 +1288,59 @@ def fetch_configure_modal_data(n_clicks, active_project, sectors):
                         'max_wam_window': max(3, row_count - 2)  # React formula: rowCount - 2
                     }
                 else:
+                    # Try to get available indicators from Economic_Indicators sheet
+                    try:
+                        import openpyxl
+                        inputs_dir = os.path.join(active_project['path'], 'inputs')
+                        excel_path = os.path.join(inputs_dir, 'input_demand_file.xlsx')
+                        if os.path.exists(excel_path):
+                            wb = openpyxl.load_workbook(excel_path, data_only=True)
+                            econ_sheet = wb['Economic_Indicators'] if 'Economic_Indicators' in wb.sheetnames else None
+                            if econ_sheet:
+                                # Get column names excluding Year
+                                headers = [cell.value for cell in next(econ_sheet.iter_rows(min_row=1, max_row=1)) if cell.value]
+                                available_params = [h for h in headers if str(h).lower() not in ['year']]
+                            else:
+                                available_params = []  # No fallback indicators if sheet missing
+                            wb.close()
+                        else:
+                            available_params = []
+                    except:
+                        available_params = []  # Empty list if error
+
                     # Default values if data extraction fails
                     sector_metadata[sector] = {
                         'row_count': 10,
                         'correlations': [],
-                        'mlr_params': ['GDP', 'Population', 'Income'],  # Fallback
+                        'mlr_params': available_params,  # Dynamic fallback or empty
                         'max_wam_window': 8
                     }
 
             except Exception as e:
                 print(f"Error fetching metadata for sector {sector}: {e}")
+                # Try to get available indicators from Economic_Indicators sheet
+                try:
+                    import openpyxl
+                    inputs_dir = os.path.join(active_project['path'], 'inputs')
+                    excel_path = os.path.join(inputs_dir, 'input_demand_file.xlsx')
+                    if os.path.exists(excel_path):
+                        wb = openpyxl.load_workbook(excel_path, data_only=True)
+                        econ_sheet = wb['Economic_Indicators'] if 'Economic_Indicators' in wb.sheetnames else None
+                        if econ_sheet:
+                            headers = [cell.value for cell in next(econ_sheet.iter_rows(min_row=1, max_row=1)) if cell.value]
+                            available_params = [h for h in headers if str(h).lower() not in ['year']]
+                        else:
+                            available_params = []
+                        wb.close()
+                    else:
+                        available_params = []
+                except:
+                    available_params = []
+
                 sector_metadata[sector] = {
                     'row_count': 10,
                     'correlations': [],
-                    'mlr_params': ['GDP', 'Population', 'Income'],
+                    'mlr_params': available_params,  # Dynamic fallback or empty
                     'max_wam_window': 8
                 }
 

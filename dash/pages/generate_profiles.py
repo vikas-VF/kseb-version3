@@ -146,6 +146,17 @@ def layout(active_project=None):
         # Hidden div for SSE clientside callback output
         html.Div(id='sse-connection-status', style={'display': 'none'}),
 
+        # Hidden source-radio (always present for callbacks, actual selection happens in Step 2)
+        dbc.RadioItems(
+            id='source-radio',
+            options=[
+                {'label': 'Template', 'value': 'template'},
+                {'label': 'Projection', 'value': 'projection'}
+            ],
+            value='template',
+            style={'display': 'none'}
+        ),
+
         # SSE Handler Script (clientside callback in JavaScript)
         html.Script('''
             // Global EventSource instance
@@ -481,18 +492,6 @@ def render_step_2(state, scenarios):
     return html.Div([
         html.H3('Total Demand Source', className='mb-3 text-center'),
         html.P('Choose where to pull annual demand targets from.', className='text-muted mb-4 text-center'),
-
-        # Single hidden radio for source selection (required for callbacks)
-        dbc.RadioItems(
-            id='source-radio',
-            options=[
-                {'label': 'Template', 'value': 'template'},
-                {'label': 'Projection', 'value': 'projection'}
-            ],
-            value=state.get('demandSource', 'template'),
-            inline=True,
-            style={'display': 'none'}  # Hidden - selection happens via card clicks
-        ),
 
         dbc.Row([
             dbc.Col([
