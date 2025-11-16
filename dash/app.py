@@ -345,38 +345,93 @@ def render_page_content(selected_page, active_project, collapsed):
         ]), style
 
 # =============================================================================
-# NAVIGATION CALLBACKS
+# NAVIGATION CALLBACKS - URL-BASED ROUTING (REACT+FASTAPI PATTERN)
 # =============================================================================
+
+# Page name to URL path mapping (like React Router routes)
+PAGE_TO_URL = {
+    'Home': '/',
+    'Create Project': '/create-project',
+    'Load Project': '/load-project',
+    'Demand Projection': '/demand-forecasting',
+    'Demand Visualization': '/demand-visualization',
+    'Generate Profiles': '/load-profiles/generate',
+    'Analyze Profiles': '/load-profiles/analyze',
+    'Model Config': '/pypsa-suite/config',
+    'View Results': '/pypsa-suite/results',
+    'Settings': '/settings',
+    'Other Tools': '/other-tools'
+}
+
+# URL path to page name mapping (reverse)
+URL_TO_PAGE = {v: k for k, v in PAGE_TO_URL.items()}
 
 @app.callback(
     Output('selected-page-store', 'data'),
+    Output('url', 'pathname'),
+    Input('url', 'pathname'),
     Input({'type': 'nav-link', 'page': ALL}, 'n_clicks'),
     State('selected-page-store', 'data'),
-    prevent_initial_call=True
+    prevent_initial_call=False  # Must run on initial load to set page from URL
 )
-def navigate_to_page(n_clicks, current_page):
-    """Handle navigation when sidebar items are clicked"""
-    if not callback_context.triggered:
-        raise PreventUpdate
+def sync_url_and_page(pathname, n_clicks, current_page):
+    """
+    Bidirectional sync between URL and page selection (React Router pattern).
 
-    # Get the triggered component ID
-    button_id = callback_context.triggered[0]['prop_id']
+    This implements the React+FastAPI navigation pattern where:
+    1. URL is the source of truth
+    2. Clicking sidebar updates URL
+    3. URL changes update page
+    4. Browser back/forward buttons work
+    5. URLs are shareable/bookmarkable
 
-    if 'nav-link' in button_id:
+    Args:
+        pathname: Current URL pathname from dcc.Location
+        n_clicks: Sidebar navigation clicks
+        current_page: Current page from store
+
+    Returns:
+        Tuple of (selected_page, url_pathname)
+    """
+    ctx = callback_context
+
+    if not ctx.triggered:
+        # Initial load: Set page based on URL
+        page_name = URL_TO_PAGE.get(pathname, 'Home')
+        url_path = pathname if pathname in URL_TO_PAGE else '/'
+        return page_name, url_path
+
+    trigger_id = ctx.triggered[0]['prop_id']
+
+    # Case 1: User clicked sidebar navigation button
+    if 'nav-link' in trigger_id:
         try:
-            # Safely parse the button ID using json.loads instead of eval
-            import json
-            button_dict = json.loads(button_id.split('.')[0])
+            # Parse button ID to get page name
+            button_dict = json.loads(trigger_id.split('.')[0])
             page_name = button_dict.get('page')
 
-            if page_name:
-                return page_name
+            if page_name and page_name in PAGE_TO_URL:
+                # Update both store and URL
+                url_path = PAGE_TO_URL[page_name]
+                return page_name, url_path
         except (json.JSONDecodeError, KeyError, ValueError) as e:
-            print(f"Error parsing button ID: {button_id}, error: {e}")
-            # Fallback: stay on current page if parsing fails
-            return current_page
+            print(f"Error parsing button ID: {trigger_id}, error: {e}")
+            # Fallback: keep current state
+            return current_page, PAGE_TO_URL.get(current_page, '/')
 
-    return current_page
+    # Case 2: URL changed (browser back/forward, direct URL entry, bookmark)
+    elif 'url.pathname' in trigger_id:
+        page_name = URL_TO_PAGE.get(pathname)
+
+        if page_name:
+            # Valid URL: Update page to match URL
+            return page_name, pathname
+        else:
+            # Invalid URL: Redirect to home
+            return 'Home', '/'
+
+    # Fallback: No change
+    return current_page, PAGE_TO_URL.get(current_page, '/')
 
 @app.callback(
     Output('sidebar-collapsed-store', 'data'),
