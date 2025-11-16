@@ -29,6 +29,20 @@ if config_path not in sys.path:
 if utils_path not in sys.path:
     sys.path.insert(0, utils_path)
 
+# Import application config (CRITICAL - needed for all DirectoryStructure references)
+from app_config import (
+    TemplateFiles,
+    InputDemandSheets,
+    LoadCurveSheets,
+    PyPSASheets,
+    ColumnNames,
+    AppDefaults,
+    DirectoryStructure,
+    DataMarkers,
+    get_project_template_path,
+    get_project_results_path
+)
+
 # PyPSA imports - LAZY LOADED (only when needed to avoid initialization on app start)
 # This prevents NetworkCache from initializing when not on PyPSA pages
 _network_cache_module = None
