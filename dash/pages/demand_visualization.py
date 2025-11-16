@@ -23,6 +23,16 @@ import sys
 import os
 from datetime import datetime
 
+# Import application config
+import sys
+import os
+config_path = os.path.join(os.path.dirname(__file__), '..', 'config')
+if config_path not in sys.path:
+    sys.path.insert(0, config_path)
+from app_config import TemplateFiles, DirectoryStructure, InputDemandSheets, LoadCurveSheets
+
+
+
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -65,7 +75,7 @@ def has_solar_rooftop_in_project(project_path, sectors):
     has_solar_share_config = False
     try:
         import openpyxl
-        file_path = os.path.join(project_path, 'inputs', 'input_demand_file.xlsx')
+        file_path = os.path.join(project_path, DirectoryStructure.INPUTS, TemplateFiles.INPUT_DEMAND_FILE)
         if os.path.exists(file_path):
             workbook = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
             # Find 'main' sheet

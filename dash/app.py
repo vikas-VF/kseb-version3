@@ -18,20 +18,86 @@ from datetime import datetime
 import threading
 import time
 
-# Import components and pages
+# Import components (lightweight, always needed)
 from components.sidebar import create_sidebar
 from components.topbar import create_topbar
 from components.workflow_stepper import create_workflow_stepper
 
-# Import pages
-from pages import home, create_project, load_project
-from pages import demand_projection, demand_visualization
-from pages import generate_profiles, analyze_profiles
-from pages import model_config, view_results
-from pages import settings_page, other_tools
+# Page modules - LAZY LOADED (only import when needed to improve startup time)
+# This prevents all heavy page dependencies from loading on app start
+_page_modules = {}
 
-# Import callbacks
-from callbacks import project_callbacks, forecast_callbacks, profile_callbacks, pypsa_callbacks, settings_callbacks
+def _lazy_import_page(page_name):
+    """
+    Lazy import page modules only when they're first accessed.
+    This significantly improves app startup time by deferring heavy imports.
+
+    Args:
+        page_name: Name of the page module to import
+
+    Returns:
+        Imported page module
+    """
+    if page_name not in _page_modules:
+        if page_name == 'home':
+            from pages import home
+            _page_modules['home'] = home
+        elif page_name == 'create_project':
+            from pages import create_project
+            _page_modules['create_project'] = create_project
+        elif page_name == 'load_project':
+            from pages import load_project
+            _page_modules['load_project'] = load_project
+        elif page_name == 'demand_projection':
+            from pages import demand_projection
+            _page_modules['demand_projection'] = demand_projection
+        elif page_name == 'demand_visualization':
+            from pages import demand_visualization
+            _page_modules['demand_visualization'] = demand_visualization
+        elif page_name == 'generate_profiles':
+            from pages import generate_profiles
+            _page_modules['generate_profiles'] = generate_profiles
+        elif page_name == 'analyze_profiles':
+            from pages import analyze_profiles
+            _page_modules['analyze_profiles'] = analyze_profiles
+        elif page_name == 'model_config':
+            from pages import model_config
+            _page_modules['model_config'] = model_config
+        elif page_name == 'view_results':
+            from pages import view_results
+            _page_modules['view_results'] = view_results
+        elif page_name == 'settings_page':
+            from pages import settings_page
+            _page_modules['settings_page'] = settings_page
+        elif page_name == 'other_tools':
+            from pages import other_tools
+            _page_modules['other_tools'] = other_tools
+
+    return _page_modules.get(page_name)
+
+# Callback modules - LAZY LOADED (only import when callbacks are registered)
+_callback_modules = {}
+
+def _lazy_import_callbacks(callback_name):
+    """Lazy import callback modules only when needed."""
+    if callback_name not in _callback_modules:
+        if callback_name == 'project':
+            from callbacks import project_callbacks
+            _callback_modules['project'] = project_callbacks
+        elif callback_name == 'forecast':
+            from callbacks import forecast_callbacks
+            _callback_modules['forecast'] = forecast_callbacks
+        elif callback_name == 'profile':
+            from callbacks import profile_callbacks
+            _callback_modules['profile'] = profile_callbacks
+        elif callback_name == 'pypsa':
+            from callbacks import pypsa_callbacks
+            _callback_modules['pypsa'] = pypsa_callbacks
+        elif callback_name == 'settings':
+            from callbacks import settings_callbacks
+            _callback_modules['settings'] = settings_callbacks
+
+    return _callback_modules.get(callback_name)
 
 # Initialize the Dash app
 app = Dash(
@@ -177,7 +243,8 @@ app.layout = html.Div([
 @app.callback(
     Output('topbar-container', 'children'),
     Input('active-project-store', 'data'),
-    Input('process-state-store', 'data')
+    Input('process-state-store', 'data'),
+    prevent_initial_call=False  # Needs to run on load to show topbar
 )
 def update_topbar(active_project, process_state):
     """Update the top bar with active project and process status"""
@@ -187,7 +254,8 @@ def update_topbar(active_project, process_state):
     Output('sidebar-container', 'children'),
     Output('sidebar-container', 'style'),
     Input('selected-page-store', 'data'),
-    Input('sidebar-collapsed-store', 'data')
+    Input('sidebar-collapsed-store', 'data'),
+    prevent_initial_call=False  # Needs to run on load to show sidebar
 )
 def update_sidebar(selected_page, collapsed):
     """Update the sidebar based on selected page and collapsed state"""
@@ -197,7 +265,8 @@ def update_sidebar(selected_page, collapsed):
 @app.callback(
     Output('workflow-container', 'children'),
     Input('selected-page-store', 'data'),
-    Input('active-project-store', 'data')
+    Input('active-project-store', 'data'),
+    prevent_initial_call=False  # Needs to run on load to show workflow
 )
 def update_workflow_stepper(selected_page, active_project):
     """Update the workflow stepper based on selected page"""
@@ -208,39 +277,71 @@ def update_workflow_stepper(selected_page, active_project):
     Output('main-content', 'style'),
     Input('selected-page-store', 'data'),
     Input('active-project-store', 'data'),
-    Input('sidebar-collapsed-store', 'data')
+    Input('sidebar-collapsed-store', 'data'),
+    prevent_initial_call=False  # Needs to run on load to show initial page
 )
 def render_page_content(selected_page, active_project, collapsed):
-    """Render the main content based on selected page"""
+    """
+    Render the main content based on selected page.
+    Uses lazy loading to import pages only when needed.
+    """
     style = CONTENT_COLLAPSED_STYLE if collapsed else CONTENT_STYLE
 
-    # Page routing
-    if selected_page == 'Home':
-        return home.layout(active_project), style
-    elif selected_page == 'Create Project':
-        return create_project.layout(), style
-    elif selected_page == 'Load Project':
-        return load_project.layout(), style
-    elif selected_page == 'Demand Projection':
-        return demand_projection.layout(active_project), style
-    elif selected_page == 'Demand Visualization':
-        return demand_visualization.layout(active_project), style
-    elif selected_page == 'Generate Profiles':
-        return generate_profiles.layout(active_project), style
-    elif selected_page == 'Analyze Profiles':
-        return analyze_profiles.layout(active_project), style
-    elif selected_page == 'Model Config':
-        return model_config.layout(active_project), style
-    elif selected_page == 'View Results':
-        return view_results.layout(active_project), style
-    elif selected_page == 'Settings':
-        return settings_page.layout(), style
-    elif selected_page == 'Other Tools':
-        return other_tools.layout(), style
-    else:
+    # Show loading state while page imports (for first access)
+    loading_spinner = html.Div([
+        dbc.Spinner(
+            html.Div(id="loading-content"),
+            color="primary",
+            type="border",
+            fullscreen=False,
+        )
+    ], className="d-flex justify-content-center align-items-center", style={"minHeight": "400px"})
+
+    # Page routing with lazy loading
+    try:
+        if selected_page == 'Home':
+            page_module = _lazy_import_page('home')
+            return page_module.layout(active_project), style
+        elif selected_page == 'Create Project':
+            page_module = _lazy_import_page('create_project')
+            return page_module.layout(), style
+        elif selected_page == 'Load Project':
+            page_module = _lazy_import_page('load_project')
+            return page_module.layout(), style
+        elif selected_page == 'Demand Projection':
+            page_module = _lazy_import_page('demand_projection')
+            return page_module.layout(active_project), style
+        elif selected_page == 'Demand Visualization':
+            page_module = _lazy_import_page('demand_visualization')
+            return page_module.layout(active_project), style
+        elif selected_page == 'Generate Profiles':
+            page_module = _lazy_import_page('generate_profiles')
+            return page_module.layout(active_project), style
+        elif selected_page == 'Analyze Profiles':
+            page_module = _lazy_import_page('analyze_profiles')
+            return page_module.layout(active_project), style
+        elif selected_page == 'Model Config':
+            page_module = _lazy_import_page('model_config')
+            return page_module.layout(active_project), style
+        elif selected_page == 'View Results':
+            page_module = _lazy_import_page('view_results')
+            return page_module.layout(active_project), style
+        elif selected_page == 'Settings':
+            page_module = _lazy_import_page('settings_page')
+            return page_module.layout(), style
+        elif selected_page == 'Other Tools':
+            page_module = _lazy_import_page('other_tools')
+            return page_module.layout(), style
+        else:
+            return html.Div([
+                html.H2("Page Not Found", className="text-2xl font-bold text-gray-800"),
+                html.P(f"The page '{selected_page}' does not exist.", className="text-gray-600")
+            ]), style
+    except Exception as e:
+        # Error loading page
         return html.Div([
-            html.H2("Page Not Found", className="text-2xl font-bold text-gray-800"),
-            html.P(f"The page '{selected_page}' does not exist.", className="text-gray-600")
+            html.H2("Error Loading Page", className="text-2xl font-bold text-red-600"),
+            html.P(f"Failed to load '{selected_page}': {str(e)}", className="text-gray-600")
         ]), style
 
 # =============================================================================
@@ -300,21 +401,20 @@ def validate_project_on_load(active_project):
 # =============================================================================
 # REGISTER ALL CALLBACKS FROM CALLBACK MODULES
 # =============================================================================
+# Note: Most callbacks are implemented in page modules themselves.
+# These callback modules are mostly empty placeholders but registered for completeness.
 
-# Register project management callbacks
-project_callbacks.register_callbacks(app)
+# Lazy load and register callback modules (lightweight, mostly empty)
+def _register_all_callbacks():
+    """Register all callback modules with lazy loading."""
+    callback_names = ['project', 'forecast', 'profile', 'pypsa', 'settings']
+    for name in callback_names:
+        callback_module = _lazy_import_callbacks(name)
+        if callback_module and hasattr(callback_module, 'register_callbacks'):
+            callback_module.register_callbacks(app)
 
-# Register forecast callbacks
-forecast_callbacks.register_callbacks(app)
-
-# Register profile callbacks
-profile_callbacks.register_callbacks(app)
-
-# Register PyPSA callbacks
-pypsa_callbacks.register_callbacks(app)
-
-# Register settings callbacks
-settings_callbacks.register_callbacks(app)
+# Register callbacks
+_register_all_callbacks()
 
 # =============================================================================
 # FLASK SSE ROUTES (Server-Sent Events for Real-Time Progress)

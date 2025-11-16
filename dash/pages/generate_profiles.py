@@ -10,6 +10,16 @@ import dash_bootstrap_components as dbc
 from services.local_service import LocalService
 import time
 
+# Import application config
+import sys
+import os
+config_path = os.path.join(os.path.dirname(__file__), '..', 'config')
+if config_path not in sys.path:
+    sys.path.insert(0, config_path)
+from app_config import TemplateFiles, DirectoryStructure, InputDemandSheets, LoadCurveSheets
+
+
+
 api = LocalService()
 
 def layout(active_project):

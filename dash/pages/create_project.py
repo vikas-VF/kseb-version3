@@ -11,6 +11,16 @@ import sys
 from datetime import datetime
 import json
 
+# Import application config for file names
+import sys
+import os
+config_path = os.path.join(os.path.dirname(__file__), '..', 'config')
+if config_path not in sys.path:
+    sys.path.insert(0, config_path)
+from app_config import TemplateFiles, DirectoryStructure
+
+
+
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -406,9 +416,9 @@ def create_project(n_clicks, name, location, description, recent_projects):
         import shutil
         backend_templates_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', 'backend_fastapi', 'input')
         template_files = [
-            'input_demand_file.xlsx',
-            'load_curve_template.xlsx',
-            'pypsa_input_template.xlsx'
+            TemplateFiles.INPUT_DEMAND_FILE,
+            TemplateFiles.LOAD_CURVE_TEMPLATE,
+            TemplateFiles.PYPSA_INPUT_TEMPLATE
         ]
 
         for template_file in template_files:
@@ -500,15 +510,15 @@ def create_project(n_clicks, name, location, description, recent_projects):
                 ], className='ms-3'),
                 html.Div([
                     html.Span('  │  ├─ 📄 ', style={'marginRight': '0.5rem', 'fontFamily': 'monospace'}),
-                    html.Code('input_demand_file.xlsx')
+                    html.Code(TemplateFiles.INPUT_DEMAND_FILE)
                 ], className='ms-5'),
                 html.Div([
                     html.Span('  │  ├─ 📄 ', style={'marginRight': '0.5rem', 'fontFamily': 'monospace'}),
-                    html.Code('load_curve_template.xlsx')
+                    html.Code(TemplateFiles.LOAD_CURVE_TEMPLATE)
                 ], className='ms-5'),
                 html.Div([
                     html.Span('  │  └─ 📄 ', style={'marginRight': '0.5rem', 'fontFamily': 'monospace'}),
-                    html.Code('pypsa_input_template.xlsx')
+                    html.Code(TemplateFiles.PYPSA_INPUT_TEMPLATE)
                 ], className='ms-5'),
                 html.Div([
                     html.Span('  ├─ 📁 ', style={'marginRight': '0.5rem', 'fontFamily': 'monospace'}),
