@@ -412,7 +412,7 @@ def validate_project_on_load(active_project):
         Output('pypsa-interval', 'disabled', allow_duplicate=True)
     ],
     Input('selected-page-store', 'data'),
-    prevent_initial_call=False
+    prevent_initial_call='initial_duplicate'  # Special value for allow_duplicate with initial call
 )
 def cleanup_intervals_on_navigation(current_page):
     """
