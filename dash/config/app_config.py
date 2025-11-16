@@ -349,8 +349,126 @@ def validate_template_file(file_path: Path) -> Dict[str, any]:
     }
 
 
-# Export all classes for easy import
+def generate_sector_colors(sectors: list) -> Dict[str, str]:
+    """
+    Generate dynamic colors for demand forecasting sectors.
+    Uses a predefined color palette that cycles through qualitative colors.
+
+    Parameters
+    ----------
+    sectors : list
+        List of sector names (e.g., ['Domestic_lt', 'Commercial_lt', ...])
+
+    Returns
+    -------
+    dict
+        Dictionary mapping sector names to hex color codes
+    """
+    # Use Plotly's qualitative color palette (colorblind-safe)
+    color_palette = [
+        '#636EFA',  # Blue
+        '#EF553B',  # Red
+        '#00CC96',  # Green
+        '#AB63FA',  # Purple
+        '#FFA15A',  # Orange
+        '#19D3F3',  # Cyan
+        '#FF6692',  # Pink
+        '#B6E880',  # Light Green
+        '#FF97FF',  # Magenta
+        '#FECB52',  # Yellow
+    ]
+
+    sector_colors = {}
+    for i, sector in enumerate(sectors):
+        sector_colors[sector] = color_palette[i % len(color_palette)]
+
+    return sector_colors
+
+
+def generate_model_colors(models: list) -> Dict[str, str]:
+    """
+    Generate dynamic colors for forecasting models.
+
+    Parameters
+    ----------
+    models : list
+        List of model names (e.g., ['SLR', 'MLR', 'WAM'])
+
+    Returns
+    -------
+    dict
+        Dictionary mapping model names to hex color codes
+    """
+    # Model-specific colors with semantic meaning
+    model_color_map = {
+        'SLR': '#3b82f6',   # Blue - Simple/Single
+        'MLR': '#8b5cf6',   # Purple - Multiple
+        'WAM': '#10b981',   # Green - Weighted Average
+        'ARIMA': '#f59e0b', # Amber - Time series
+        'EXP': '#ef4444',   # Red - Exponential
+    }
+
+    model_colors = {}
+    default_colors = ['#6366f1', '#ec4899', '#14b8a6', '#f97316', '#84cc16']
+
+    for i, model in enumerate(models):
+        if model in model_color_map:
+            model_colors[model] = model_color_map[model]
+        else:
+            # Fallback to cycling through default colors
+            model_colors[model] = default_colors[i % len(default_colors)]
+
+    return model_colors
+
+
+def get_sectors_from_excel(excel_path: str) -> list:
+    """
+    Extract sector names dynamically from input demand Excel file.
+
+    Parameters
+    ----------
+    excel_path : str
+        Path to input_demand_file.xlsx
+
+    Returns
+    -------
+    list
+        List of sector sheet names
+    """
+    import pandas as pd
+
+    try:
+        xls = pd.ExcelFile(excel_path)
+        # Filter out non-sector sheets
+        excluded_sheets = [
+            InputDemandSheets.MAIN,
+            InputDemandSheets.ECONOMIC_INDICATORS,
+            InputDemandSheets.UNITS,
+            'commons'  # Additional excluded sheet
+        ]
+
+        sectors = [
+            sheet for sheet in xls.sheet_names
+            if sheet not in excluded_sheets
+        ]
+
+        return sectors
+    except Exception as e:
+        print(f"Error reading sectors from Excel: {e}")
+        # Return default sectors as fallback
+        return [
+            'Domestic_lt',
+            'Commercial_lt',
+            'Industrial_ht',
+            'Agricultural',
+            'Street_lights',
+            'General_purpose'
+        ]
+
+
+# Export all classes and functions for easy import
 __all__ = [
+    # Configuration classes
     'TemplateFiles',
     'InputDemandSheets',
     'LoadCurveSheets',
@@ -360,7 +478,12 @@ __all__ = [
     'DirectoryStructure',
     'DataMarkers',
     'UIConstants',
+    # Helper functions
     'get_project_template_path',
     'get_project_results_path',
-    'validate_template_file'
+    'validate_template_file',
+    # Dynamic color generation
+    'generate_sector_colors',
+    'generate_model_colors',
+    'get_sectors_from_excel'
 ]
