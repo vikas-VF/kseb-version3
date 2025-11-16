@@ -1574,7 +1574,7 @@ class LocalService:
 
     def cancel_pypsa_model(self, process_id: str) -> Dict:
         """
-        Cancel PyPSA optimization process
+        Cancel PyPSA optimization process (thread-based)
 
         Args:
             process_id: Process identifier
@@ -1595,40 +1595,32 @@ class LocalService:
             return format_error('process_not_found', f'Process ID: {process_id}')
 
         proc_info = pypsa_solver_processes[process_id]
-        process = proc_info['process']
         print(f"[DEBUG] Found process info: {proc_info.keys()}")
-        print(f"[DEBUG] Process poll status: {process.poll()}")
 
         try:
             # Check if already finished
-            if process.poll() is not None:
-                print(f"[DEBUG] Process already completed")
-                cleanup_process(process_id, 'pypsa')
+            current_status = proc_info.get('status')
+            if current_status in ['completed', 'failed', 'cancelled']:
+                print(f"[DEBUG] Process already finished with status: {current_status}")
                 return {
                     'success': True,
-                    'message': 'Process already completed'
+                    'message': f'Process already {current_status}'
                 }
 
             logger.info(f"Cancelling PyPSA optimization process: {process_id}")
-            print(f"[DEBUG] Calling process.terminate() on PID: {process.pid}")
 
-            # Try graceful termination
-            process.terminate()
-            print(f"[DEBUG] process.terminate() called successfully")
+            # NOTE: Python threads cannot be forcefully terminated
+            # We mark as cancelled and the thread will finish naturally
+            proc_info['status'] = 'cancelled'
+            proc_info['logs'].append({
+                'timestamp': time.strftime('%H:%M:%S'),
+                'level': 'warning',
+                'text': '⚠️ Cancellation requested - waiting for current operation to complete...'
+            })
 
-            try:
-                print(f"[DEBUG] Waiting up to 5 seconds for graceful shutdown...")
-                process.wait(timeout=5)
-                logger.info(f"Process {process_id} terminated gracefully")
-                print(f"[DEBUG] Process terminated gracefully")
-            except subprocess.TimeoutExpired:
-                print(f"[DEBUG] Graceful termination timed out, calling process.kill()")
-                process.kill()
-                process.wait()
-                logger.info(f"Process {process_id} killed")
-                print(f"[DEBUG] Process killed successfully")
+            print(f"[DEBUG] Marked process as cancelled")
 
-            # Send cancellation event to SSE queue
+            # Send cancellation event to SSE queue (if used)
             print(f"[DEBUG] Sending cancellation event to pypsa_solver_sse_queue")
             pypsa_solver_sse_queue.put({
                 'type': 'end',
@@ -1637,11 +1629,6 @@ class LocalService:
                 'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
             })
             print(f"[DEBUG] SSE cancellation event sent")
-
-            # Cleanup
-            print(f"[DEBUG] Calling cleanup_process for {process_id}")
-            cleanup_process(process_id, 'pypsa')
-            print(f"[DEBUG] cleanup_process completed")
 
             result = {
                 'success': True,
@@ -2069,28 +2056,194 @@ class LocalService:
             logger.error(f"Error getting PyPSA scenarios: {e}")
             return {'scenarios': []}
 
-    def run_pypsa_model(self, config: Dict) -> Dict:
-        """Execute PyPSA model"""
+    def run_pypsa_model(self, config: Dict, process_id: str = None) -> Dict:
+        """
+        Execute PyPSA model asynchronously in background thread.
+
+        Args:
+            config: Model configuration dict containing:
+                - project_path: Project folder path
+                - scenario_name: Scenario name
+                - solver: Solver name (e.g., 'highs')
+            process_id: Unique process identifier (required for tracking)
+
+        Returns:
+            Dict with success status and process_id
+        """
+        global pypsa_solver_processes
+
         try:
-            # Import PyPSA model executor
-            import sys
-            models_path = os.path.join(os.path.dirname(__file__), '..', 'models')
-            if models_path not in sys.path:
-                sys.path.insert(0, models_path)
+            # Validate required parameters
+            if not process_id:
+                return {'success': False, 'error': 'process_id is required'}
 
-            from pypsa_model_executor import run_pypsa_model_complete
+            project_path = config.get('project_path')
+            scenario_name = config.get('scenario_name')
 
-            # Execute PyPSA optimization
-            results = run_pypsa_model_complete(config)
+            if not project_path or not scenario_name:
+                return {'success': False, 'error': 'project_path and scenario_name are required'}
+
+            # Validate project path exists
+            if not os.path.exists(project_path):
+                return {'success': False, 'error': f'Project path does not exist: {project_path}'}
+
+            # Validate input file exists (pypsa_input_template.xlsx)
+            input_file = os.path.join(project_path, DirectoryStructure.INPUTS, 'pypsa_input_template.xlsx')
+            if not os.path.exists(input_file):
+                return {
+                    'success': False,
+                    'error': 'pypsa_input_template.xlsx not found in inputs folder. Please ensure input data exists.'
+                }
+
+            # Check if process already running
+            if process_id in pypsa_solver_processes:
+                proc_info = pypsa_solver_processes[process_id]
+                if proc_info.get('status') == 'running':
+                    return {'success': False, 'error': 'A model is already running with this process ID'}
+
+            # Initialize process info
+            pypsa_solver_processes[process_id] = {
+                'status': 'running',
+                'progress': 0,
+                'message': 'Starting PyPSA model execution...',
+                'logs': [],
+                'start_time': time.time(),
+                'config': config,
+                'error': None,
+                'results': None
+            }
+
+            # Start execution in background thread
+            def run_model_thread():
+                """Background thread for PyPSA model execution"""
+                try:
+                    # Import PyPSA model executor
+                    import sys
+                    models_path = os.path.join(os.path.dirname(__file__), '..', 'models')
+                    if models_path not in sys.path:
+                        sys.path.insert(0, models_path)
+
+                    from pypsa_model_executor import run_pypsa_model_complete
+
+                    # Update progress
+                    pypsa_solver_processes[process_id]['progress'] = 10
+                    pypsa_solver_processes[process_id]['message'] = 'Initializing PyPSA model...'
+                    pypsa_solver_processes[process_id]['logs'].append({
+                        'timestamp': time.strftime('%H:%M:%S'),
+                        'level': 'info',
+                        'text': f'Starting PyPSA optimization for scenario: {scenario_name}'
+                    })
+
+                    # Execute PyPSA optimization (blocking call)
+                    # NOTE: This is synchronous and cannot be interrupted mid-execution
+                    logger.info(f"[PyPSA {process_id}] Starting model execution")
+                    results = run_pypsa_model_complete(config)
+
+                    # Check if cancelled during execution
+                    if pypsa_solver_processes[process_id].get('status') == 'cancelled':
+                        logger.info(f"[PyPSA {process_id}] Execution completed but was cancelled")
+                        pypsa_solver_processes[process_id]['logs'].append({
+                            'timestamp': time.strftime('%H:%M:%S'),
+                            'level': 'warning',
+                            'text': '⚠️ Model execution completed but was cancelled by user'
+                        })
+                        return  # Exit thread
+
+                    # Update with results
+                    if results.get('success'):
+                        pypsa_solver_processes[process_id]['status'] = 'completed'
+                        pypsa_solver_processes[process_id]['progress'] = 100
+                        pypsa_solver_processes[process_id]['message'] = 'Model execution completed successfully!'
+                        pypsa_solver_processes[process_id]['results'] = results
+                        pypsa_solver_processes[process_id]['logs'].append({
+                            'timestamp': time.strftime('%H:%M:%S'),
+                            'level': 'success',
+                            'text': '✅ Model execution completed successfully!'
+                        })
+                        logger.info(f"[PyPSA {process_id}] Completed successfully")
+                    else:
+                        pypsa_solver_processes[process_id]['status'] = 'failed'
+                        pypsa_solver_processes[process_id]['error'] = results.get('error', 'Unknown error')
+                        pypsa_solver_processes[process_id]['logs'].append({
+                            'timestamp': time.strftime('%H:%M:%S'),
+                            'level': 'error',
+                            'text': f'❌ Error: {results.get("error", "Unknown error")}'
+                        })
+                        logger.error(f"[PyPSA {process_id}] Failed: {results.get('error')}")
+
+                except Exception as e:
+                    # Check if cancelled before updating status
+                    if pypsa_solver_processes[process_id].get('status') != 'cancelled':
+                        pypsa_solver_processes[process_id]['status'] = 'failed'
+                        pypsa_solver_processes[process_id]['error'] = str(e)
+                        pypsa_solver_processes[process_id]['logs'].append({
+                            'timestamp': time.strftime('%H:%M:%S'),
+                            'level': 'error',
+                            'text': f'❌ Fatal error: {str(e)}'
+                        })
+                        logger.error(f"[PyPSA {process_id}] Exception: {e}")
+                        import traceback
+                        traceback.print_exc()
+
+            # Start background thread
+            import threading
+            thread = threading.Thread(target=run_model_thread, daemon=True, name=f'pypsa-{process_id}')
+            thread.start()
+
+            # Store thread reference
+            pypsa_solver_processes[process_id]['thread'] = thread
+
+            logger.info(f"PyPSA model execution started in background: {process_id}")
 
             return {
                 'success': True,
-                'process_id': 'local_pypsa',
-                DirectoryStructure.RESULTS: results
+                'process_id': process_id,
+                'message': f'Model execution started for scenario: {scenario_name}'
             }
 
         except Exception as e:
-            logger.error(f"Error running PyPSA model: {e}")
+            logger.error(f"Error starting PyPSA model: {e}")
+            return {'success': False, 'error': str(e)}
+
+    def get_pypsa_progress(self, process_id: str) -> Dict:
+        """
+        Get current progress of PyPSA model execution.
+
+        Args:
+            process_id: Process identifier
+
+        Returns:
+            Dict containing:
+                - success: bool
+                - status: 'running', 'completed', 'failed'
+                - progress: int (0-100)
+                - message: str
+                - logs: list of log entries
+                - error: str (if failed)
+        """
+        global pypsa_solver_processes
+
+        try:
+            if process_id not in pypsa_solver_processes:
+                return {
+                    'success': False,
+                    'error': f'Process not found: {process_id}'
+                }
+
+            proc_info = pypsa_solver_processes[process_id]
+
+            return {
+                'success': True,
+                'status': proc_info.get('status', 'unknown'),
+                'progress': proc_info.get('progress', 0),
+                'message': proc_info.get('message', ''),
+                'logs': proc_info.get('logs', []),
+                'error': proc_info.get('error'),
+                'results': proc_info.get('results')
+            }
+
+        except Exception as e:
+            logger.error(f"Error getting PyPSA progress: {e}")
             return {'success': False, 'error': str(e)}
 
     # ==================== T&D LOSSES ====================

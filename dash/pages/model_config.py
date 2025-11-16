@@ -407,22 +407,27 @@ def start_model_execution(n_clicks, config_state, process_state, active_project)
     import sys, os
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from services.local_service import service as api
-    import threading
+    import uuid
 
     scenario_name = config_state.get('scenarioName', '').strip() or DEFAULT_SCENARIO_NAME
     solver = config_state.get('solver', 'highs')
     project_path = active_project['path']
 
     try:
+        # Generate unique process ID (CRITICAL FIX: Now properly tracked)
+        process_id = str(uuid.uuid4())
+
         # Update process state immediately
+        process_state['process_id'] = process_id  # ✅ FIX: Store process_id
         process_state['isRunning'] = True
         process_state['status'] = 'running'
         process_state['percentage'] = 10
         process_state['message'] = 'Starting PyPSA model execution...'
         process_state['logs'] = [
-            {'timestamp': '00:00:00', 'level': 'info', 'text': f'Started PyPSA model: {scenario_name}'},
-            {'timestamp': '00:00:01', 'level': 'info', 'text': f'Solver: {solver}'},
-            {'timestamp': '00:00:02', 'level': 'info', 'text': 'Initializing model...'}
+            {'timestamp': time.strftime('%H:%M:%S'), 'level': 'info', 'text': f'Started PyPSA model: {scenario_name}'},
+            {'timestamp': time.strftime('%H:%M:%S'), 'level': 'info', 'text': f'Solver: {solver}'},
+            {'timestamp': time.strftime('%H:%M:%S'), 'level': 'info', 'text': f'Process ID: {process_id}'},
+            {'timestamp': time.strftime('%H:%M:%S'), 'level': 'info', 'text': 'Initializing model...'}
         ]
         process_state['modalVisible'] = True
         process_state['modalMinimized'] = False
@@ -434,18 +439,23 @@ def start_model_execution(n_clicks, config_state, process_state, active_project)
             'solver': solver
         }
 
-        # Start execution in background thread
-        def run_model_thread():
-            try:
-                result = api.run_pypsa_model(pypsa_config)
-                # Store result in a global state or file
-                print(f"[PyPSA] Model completed: {result}")
-            except Exception as e:
-                print(f"[PyPSA] Model failed: {e}")
+        # ✅ FIX: Start execution in background using new async method
+        result = api.run_pypsa_model(pypsa_config, process_id=process_id)
 
-        thread = threading.Thread(target=run_model_thread, daemon=True)
-        thread.start()
+        if not result.get('success'):
+            # Failed to start
+            process_state['isRunning'] = False
+            process_state['status'] = 'failed'
+            process_state['logs'].append({
+                'timestamp': time.strftime('%H:%M:%S'),
+                'level': 'error',
+                'text': f'❌ Failed to start: {result.get("error", "Unknown error")}'
+            })
+            config_state['error'] = result.get('error', 'Failed to start model')
+            return process_state, True, config_state  # Disable polling
 
+        # Successfully started
+        print(f"[PyPSA] Model execution started with process_id: {process_id}")
         config_state['error'] = ''
 
         return process_state, False, config_state  # Enable polling
@@ -478,51 +488,69 @@ def poll_model_progress(n_intervals, process_state, active_project, current_page
     if not process_state.get('isRunning'):
         return dash.no_update, True  # Disable polling
 
-    # NOTE: Since PyPSA execution in local_service is synchronous,
-    # we simulate progress for now. In a production system, you'd implement
-    # proper progress tracking via SSE or polling a status file.
+    # ✅ FIX: Poll REAL progress from backend (not simulated)
 
     try:
-        current_percentage = process_state.get('percentage', 10)
+        process_id = process_state.get('process_id')
 
-        # Simulate progress increment
-        if current_percentage < 90:
-            new_percentage = min(90, current_percentage + 5)
-            process_state['percentage'] = new_percentage
-            process_state['message'] = f'PyPSA optimization in progress... ({new_percentage}%)'
+        if not process_id:
+            print('[PyPSA Config] Warning: No process_id found, stopping polling')
+            return process_state, True  # Disable polling
 
-            # Add simulated log every 10%
-            if new_percentage % 10 == 0:
-                process_state['logs'].append({
-                    'timestamp': f'00:00:{n_intervals:02d}',
-                    'level': 'info',
-                    'text': f'Progress: {new_percentage}%'
-                })
+        # Get real progress from backend
+        from services.local_service import service as api
+        progress_result = api.get_pypsa_progress(process_id)
 
-        # After 30 seconds (30 intervals), mark as complete
-        # In production, check actual completion status
-        if n_intervals >= 30:
+        if not progress_result.get('success'):
+            # Process not found or error
+            print(f'[PyPSA Config] Error getting progress: {progress_result.get("error")}')
             process_state['isRunning'] = False
-            process_state['status'] = 'completed'
-            process_state['percentage'] = 100
-            process_state['message'] = 'Model execution completed!'
+            process_state['status'] = 'failed'
             process_state['logs'].append({
-                'timestamp': f'00:00:{n_intervals:02d}',
-                'level': 'success',
-                'text': '✅ Model execution completed successfully!'
+                'timestamp': time.strftime('%H:%M:%S'),
+                'level': 'error',
+                'text': f'❌ Error: {progress_result.get("error", "Unknown error")}'
             })
             return process_state, True  # Disable polling
 
-        return process_state, False  # Continue polling
+        # Update process state with real data
+        backend_status = progress_result.get('status', 'unknown')
+        process_state['status'] = backend_status
+        process_state['percentage'] = progress_result.get('progress', 0)
+        process_state['message'] = progress_result.get('message', '')
+
+        # Append new logs (only logs not already shown)
+        backend_logs = progress_result.get('logs', [])
+        current_log_count = len(process_state.get('logs', []))
+        new_logs = backend_logs[current_log_count:]  # Get only new logs
+        if new_logs:
+            process_state['logs'].extend(new_logs)
+
+        # Check if completed or failed
+        if backend_status == 'completed':
+            process_state['isRunning'] = False
+            print(f'[PyPSA Config] Model completed successfully')
+            return process_state, True  # Disable polling
+
+        elif backend_status == 'failed':
+            process_state['isRunning'] = False
+            error_msg = progress_result.get('error', 'Unknown error')
+            print(f'[PyPSA Config] Model failed: {error_msg}')
+            return process_state, True  # Disable polling
+
+        # Still running, continue polling
+        return process_state, False
 
     except Exception as e:
-        print(f'[PyPSA Config] Error polling progress: {e}')
+        print(f'[PyPSA Config] Exception polling progress: {e}')
+        import traceback
+        traceback.print_exc()
         process_state['isRunning'] = False
         process_state['status'] = 'failed'
         process_state['logs'].append({
-            'timestamp': '99:99:99',
+            'timestamp': time.strftime('%H:%M:%S'),
             'level': 'error',
-            'text': f'❌ Error: {str(e)}'
+            'text': f'❌ Exception: {str(e)}'
         })
         return process_state, True  # Disable polling
 
