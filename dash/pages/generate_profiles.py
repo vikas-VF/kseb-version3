@@ -712,12 +712,18 @@ def generate_profile(n_clicks, state, project, process_state):
     Input('prof-progress-interval', 'n_intervals'),
     [
         State('prof-process-state', 'data'),
-        State('prof-logs-store', 'data')
+        State('prof-logs-store', 'data'),
+        State('selected-page-store', 'data')  # CRITICAL FIX: Check current page
     ],
     prevent_initial_call=True
 )
-def poll_sse_progress(n_intervals, process_state, current_logs):
+def poll_sse_progress(n_intervals, process_state, current_logs, current_page):
     """Poll SSE queue for new progress events"""
+    # CRITICAL FIX: Stop polling if navigated away from Generate Profiles page
+    # This prevents React warnings about updating unmounted components
+    if current_page != 'Generate Profiles':
+        return no_update, no_update, True  # Disable polling
+
     if not process_state or not process_state.get('isRunning'):
         return no_update, no_update, True  # Disable polling
 

@@ -1813,11 +1813,18 @@ def start_forecasting(n_clicks, scenario_name, target_year, exclude_covid,
     Output('forecast-progress-interval', 'disabled', allow_duplicate=True),
     Input('forecast-progress-interval', 'n_intervals'),
     State('forecast-process-state', 'data'),
+    State('selected-page-store', 'data'),  # CRITICAL FIX: Check current page
     prevent_initial_call=True
 )
-def poll_forecast_progress(n_intervals, process_state):
+def poll_forecast_progress(n_intervals, process_state, current_page):
     """Poll for forecast progress updates from SSE queue"""
-    print(f"[DEBUG] poll_forecast_progress: n_intervals={n_intervals}, process_state={process_state}")
+    print(f"[DEBUG] poll_forecast_progress: n_intervals={n_intervals}, process_state={process_state}, current_page={current_page}")
+
+    # CRITICAL FIX: Stop polling if navigated away from Demand Projection page
+    # This prevents React warnings about updating unmounted components
+    if current_page != 'Demand Projection':
+        print(f"[DEBUG] Not on Demand Projection page (current: {current_page}), disabling interval")
+        return no_update, True  # Disable interval
 
     if not process_state or not process_state.get('process_id'):
         print("[DEBUG] No process_state or process_id, disabling interval")

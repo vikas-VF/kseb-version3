@@ -88,21 +88,32 @@ def layout():
                 # Project Location
                 dbc.Row([
                     dbc.Col([
-                        dbc.Label('Parent Folder Path *', className='fw-bold'),
-                        dbc.InputGroup([
-                            dbc.Input(
-                                id='project-location-input',
-                                type='text',
-                                placeholder='e.g., C:\\Projects or /home/user/projects',
-                                className='mb-2'
-                            ),
-                            dbc.Button(
-                                '📁 Browse',
-                                id='browse-folder-btn',
-                                color='secondary',
-                                outline=True
-                            )
-                        ], className='mb-2'),
+                        dbc.Label([
+                            'Parent Folder Path *',
+                            html.Span(' ℹ️', id='path-help-icon', style={'cursor': 'help', 'marginLeft': '0.5rem'}),
+                        ], className='fw-bold'),
+                        dbc.Tooltip([
+                            html.Strong('How to get the folder path:'),
+                            html.Ol([
+                                html.Li('Open File Explorer (Windows) or Finder (Mac)'),
+                                html.Li('Navigate to where you want to create the project'),
+                                html.Li('Click the address bar at the top to highlight the path'),
+                                html.Li('Copy (Ctrl+C / Cmd+C) and paste (Ctrl+V / Cmd+V) here')
+                            ], style={'marginTop': '0.5rem', 'paddingLeft': '1.2rem', 'marginBottom': '0'}),
+                            html.Div([
+                                html.Strong('Example paths:'),
+                                html.Ul([
+                                    html.Li('Windows: C:\\Users\\YourName\\Documents'),
+                                    html.Li('Mac/Linux: /home/username/projects')
+                                ], style={'marginTop': '0.5rem', 'paddingLeft': '1.2rem', 'marginBottom': '0'})
+                            ], style={'marginTop': '0.5rem'})
+                        ], target='path-help-icon', placement='right', style={'maxWidth': '400px'}),
+                        dbc.Input(
+                            id='project-location-input',
+                            type='text',
+                            placeholder='e.g., C:\\Projects or /home/user/projects',
+                            className='mb-2'
+                        ),
                         html.Div(id='path-validation-feedback', className='mb-3'),
 
                         # Final path preview

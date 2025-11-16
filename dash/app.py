@@ -399,6 +399,43 @@ def validate_project_on_load(active_project):
     return active_project
 
 # =============================================================================
+# GLOBAL INTERVAL CLEANUP - MEMORY LEAK FIX
+# =============================================================================
+# This callback disables all global intervals when navigating between pages.
+# This prevents React warnings about updating unmounted components and fixes memory leaks.
+# Page-specific callbacks will re-enable intervals as needed.
+
+@app.callback(
+    [
+        Output('forecast-interval', 'disabled', allow_duplicate=True),
+        Output('profile-interval', 'disabled', allow_duplicate=True),
+        Output('pypsa-interval', 'disabled', allow_duplicate=True)
+    ],
+    Input('selected-page-store', 'data'),
+    prevent_initial_call=False
+)
+def cleanup_intervals_on_navigation(current_page):
+    """
+    CRITICAL FIX: Disable all global intervals when user navigates.
+
+    This prevents memory leaks from intervals trying to update unmounted components.
+    When a user navigates away from a page, React unmounts the components but intervals
+    continue running, causing "Can't perform a React state update on unmounted component" warnings.
+
+    Individual pages will re-enable their specific intervals as needed.
+
+    Args:
+        current_page: Name of the current page from selected-page-store
+
+    Returns:
+        Tuple of (forecast_disabled, profile_disabled, pypsa_disabled)
+        All set to True to disable intervals on every navigation
+    """
+    # Disable all intervals by default on every page change
+    # Pages that need them will re-enable in their own callbacks
+    return True, True, True
+
+# =============================================================================
 # REGISTER ALL CALLBACKS FROM CALLBACK MODULES
 # =============================================================================
 # Note: Most callbacks are implemented in page modules themselves.

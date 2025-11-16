@@ -463,12 +463,18 @@ def start_model_execution(n_clicks, config_state, process_state, active_project)
     Input('pypsa-progress-interval', 'n_intervals'),
     [
         State('pypsa-process-state', 'data'),
-        State('active-project-store', 'data')
+        State('active-project-store', 'data'),
+        State('selected-page-store', 'data')  # CRITICAL FIX: Check current page
     ],
     prevent_initial_call=True
 )
-def poll_model_progress(n_intervals, process_state, active_project):
+def poll_model_progress(n_intervals, process_state, active_project, current_page):
     """Poll model progress from backend."""
+    # CRITICAL FIX: Stop polling if navigated away from Model Config page
+    # This prevents React warnings about updating unmounted components
+    if current_page != 'Model Config':
+        return dash.no_update, True  # Disable polling
+
     if not process_state.get('isRunning'):
         return dash.no_update, True  # Disable polling
 
