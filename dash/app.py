@@ -359,11 +359,22 @@ def navigate_to_page(n_clicks, current_page):
     if not callback_context.triggered:
         raise PreventUpdate
 
+    # Get the triggered component ID
     button_id = callback_context.triggered[0]['prop_id']
+
     if 'nav-link' in button_id:
-        # Extract the page name from the button ID
-        page_name = eval(button_id.split('.')[0])['page']
-        return page_name
+        try:
+            # Safely parse the button ID using json.loads instead of eval
+            import json
+            button_dict = json.loads(button_id.split('.')[0])
+            page_name = button_dict.get('page')
+
+            if page_name:
+                return page_name
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            print(f"Error parsing button ID: {button_id}, error: {e}")
+            # Fallback: stay on current page if parsing fails
+            return current_page
 
     return current_page
 
