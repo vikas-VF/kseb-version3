@@ -54,7 +54,22 @@ except Exception as e:
 print("\n[TEST 4] Checking registered callbacks...")
 try:
     callbacks = app.app.callback_map
-    print(f"✅ Total callbacks registered: {len(callbacks)}")
+    total_callbacks = len(callbacks)
+    print(f"✅ Total callbacks registered: {total_callbacks}")
+
+    # Categorize callbacks by source
+    app_callbacks = [cb for cb in callbacks if 'selected-page' in cb or 'sidebar' in cb or 'topbar' in cb]
+    page_callbacks = [cb for cb in callbacks if cb not in app_callbacks]
+
+    print(f"   📊 App-level callbacks: {len(app_callbacks)}")
+    print(f"   📄 Page-level callbacks: {len(page_callbacks)}")
+
+    # Expected minimum: ~13 from app.py + ~137 from pages = ~150 total
+    if total_callbacks < 50:
+        print(f"   ⚠️  WARNING: Only {total_callbacks} callbacks registered!")
+        print(f"   ⚠️  Expected 100+ callbacks (pages may not be imported)")
+    elif total_callbacks >= 100:
+        print(f"   ✅ EXCELLENT: {total_callbacks} callbacks registered (pages imported correctly)")
 
     # Check for specific critical callbacks
     critical_callbacks = [
@@ -64,11 +79,27 @@ try:
         'sidebar-container.children'
     ]
 
+    print("\n   Critical Callbacks:")
     for callback_id in critical_callbacks:
         if callback_id in callbacks:
             print(f"   ✅ {callback_id}")
         else:
             print(f"   ⚠️  {callback_id} NOT FOUND")
+
+    # Check for page-specific callbacks
+    print("\n   Page Callbacks Sample:")
+    page_callback_samples = [
+        'create-project-status.children',
+        'name-validation-feedback.children',
+        'total-forecasts-count.children',
+        'total-profiles-count.children'
+    ]
+
+    for callback_id in page_callback_samples:
+        if callback_id in callbacks:
+            print(f"   ✅ {callback_id}")
+        else:
+            print(f"   ⚠️  {callback_id} NOT FOUND (page not imported?)")
 
 except Exception as e:
     print(f"❌ Error checking callbacks: {e}")

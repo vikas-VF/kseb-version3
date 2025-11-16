@@ -599,6 +599,49 @@ def pypsa_solver_logs_sse():
     )
 
 # =============================================================================
+# EAGER IMPORT ALL PAGES - CRITICAL FIX FOR CALLBACK REGISTRATION
+# =============================================================================
+# **IMPORTANT:** Dash requires ALL callbacks to be registered BEFORE app.run_server()
+# Lazy loading imports pages too late (after server starts), causing callbacks to fail
+# This eager import ensures all page callbacks are registered when server starts
+
+print("\n" + "="*80)
+print("REGISTERING PAGE CALLBACKS")
+print("="*80)
+
+# Import all pages to register their callbacks
+from pages import (
+    home,
+    create_project,
+    load_project,
+    demand_projection,
+    demand_visualization,
+    generate_profiles,
+    analyze_profiles,
+    model_config,
+    view_results,
+    settings_page,
+    other_tools
+)
+
+# Pre-populate the lazy loading cache
+_page_modules['home'] = home
+_page_modules['create_project'] = create_project
+_page_modules['load_project'] = load_project
+_page_modules['demand_projection'] = demand_projection
+_page_modules['demand_visualization'] = demand_visualization
+_page_modules['generate_profiles'] = generate_profiles
+_page_modules['analyze_profiles'] = analyze_profiles
+_page_modules['model_config'] = model_config
+_page_modules['view_results'] = view_results
+_page_modules['settings_page'] = settings_page
+_page_modules['other_tools'] = other_tools
+
+print(f"✅ Successfully imported {len(_page_modules)} page modules")
+print(f"✅ All page callbacks registered")
+print("="*80 + "\n")
+
+# =============================================================================
 # RUN THE APP
 # =============================================================================
 
