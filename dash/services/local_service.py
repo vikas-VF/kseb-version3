@@ -1742,22 +1742,77 @@ class LocalService:
     # ==================== LOAD PROFILES ====================
 
     def get_load_profiles(self, project_path: str) -> Dict:
-        """List all load profile files"""
-        try:
-            profiles_dir = os.path.join(project_path, 'results', 'load_profiles')
 
-            if not os.path.exists(profiles_dir):
+        """
+        List all load profile Excel files in results/load_profiles.
+
+        Returns:
+            {'profiles': ['ProfileA', 'ProfileB', ...]}
+        """
+        try:
+            profiles_dir = Path(project_path) / "results" / "load_profiles"
+
+            if not profiles_dir.exists() or not profiles_dir.is_dir():
+                logger.info(f"Load profiles directory not found: {profiles_dir}")
                 return {'profiles': []}
 
-            profiles = [d for d in os.listdir(profiles_dir)
-                       if os.path.isdir(os.path.join(profiles_dir, d))]
+            excel_exts = {'.xlsx', '.xls', '.xlsm', '.xlsb', '.csv'}
+            profiles = []
+
+            for p in sorted(profiles_dir.iterdir()):
+                # Skip hidden files (Unix: startswith '.'), and directories
+                if p.name.startswith('.') or p.is_dir():
+                    continue
+
+                # Accept only known spreadsheet extensions
+                if p.suffix.lower() not in excel_exts:
+                    continue
+
+                # Use filename without extension as profile name
+                profile_name = p.stem.strip()
+                if profile_name:
+                    profiles.append(profile_name)
 
             return {'profiles': profiles}
 
         except Exception as e:
-            logger.error(f"Error getting profiles: {e}")
+            logger.error(f"Error listing load profiles in {project_path}: {e}")
             return {'profiles': []}
 
+
+    def get_load_profiles_with_meta(self, project_path: str) -> Dict:
+        """
+        Alternative richer listing with metadata:
+            {'profiles': [{'name': 'ProfileA', 'file': 'ProfileA.xlsx', 'modified': '2025-11-15T12:34:56'}, ...]}
+
+        Useful if frontend wants labels, original filenames, or modification times.
+        """
+        try:
+            profiles_dir = Path(project_path) / "results" / "load_profiles"
+            if not profiles_dir.exists() or not profiles_dir.is_dir():
+                return {'profiles': []}
+
+            out = []
+            for p in sorted(profiles_dir.iterdir()):
+                if p.name.startswith('.') or not p.is_dir():  # Skip hidden files and regular files, only process directories
+                    continue
+
+                try:
+                    mtime = p.stat().st_mtime
+                    modified_iso = pd.to_datetime(mtime, unit='s').isoformat()
+                except Exception:
+                    modified_iso = None
+
+                out.append({
+                    'name': p.name,  # Directory name is the profile name
+                    'file': p.name,  # Directory path is the profile path
+                    'modified': modified_iso
+                })
+
+            return {'profiles': out}
+        except Exception as e:
+            logger.error(f"Error listing load profiles with meta in {project_path}: {e}")
+            return {'profiles': []}
     def generate_profile(self, config: Dict) -> Dict:
         """Start load profile generation with subprocess execution"""
         try:
