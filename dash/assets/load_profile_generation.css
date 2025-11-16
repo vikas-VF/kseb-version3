@@ -1,0 +1,152 @@
+/* Load Profile Generation - Modern UI Styles */
+
+/* Card hover effects */
+.method-card:hover,
+[id*="-card"]:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 25px rgba(102, 126, 234, 0.15) !important;
+}
+
+/* Smooth transitions */
+.method-card,
+[id*="-card"] {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+/* Form inputs */
+.form-control,
+.form-select {
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 15px;
+    transition: all 0.2s ease;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+    outline: none;
+}
+
+/* Buttons */
+.btn-lg {
+    padding: 12px 32px;
+    font-size: 16px;
+    font-weight: 600;
+    border-radius: 10px;
+    transition: all 0.2s ease;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    border: none;
+}
+
+.btn-success:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+}
+
+.btn-light {
+    background: #f3f4f6;
+    border: 2px solid #e5e7eb;
+    color: #374151;
+}
+
+.btn-light:hover {
+    background: #e5e7eb;
+    border-color: #d1d5db;
+}
+
+/* Constraint radio options */
+.constraint-options .form-check {
+    padding: 16px 20px;
+    border: 2px solid #e5e7eb;
+    border-radius: 10px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: white;
+}
+
+.constraint-options .form-check:hover {
+    border-color: #667eea;
+    background: #f9fafb;
+}
+
+.constraint-options .form-check-input:checked ~ * {
+    border-color: #667eea !important;
+    background: #eef2ff !important;
+}
+
+.constraint-options .form-check-input {
+    width: 20px;
+    height: 20px;
+    margin-top: 4px;
+}
+
+/* Step content animation */
+#step-content > div {
+    animation: fadeInUp 0.4s ease;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Validation feedback */
+[id*="-feedback"] {
+    animation: slideIn 0.3s ease;
+    padding: 8px 12px;
+    border-radius: 6px;
+    display: inline-block;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Card borders for primary theme */
+.border-primary {
+    border-left: 4px solid #667eea !important;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .method-card,
+    [id*="-card"] {
+        margin-bottom: 16px;
+    }
+
+    .btn-lg {
+        width: 100%;
+        margin-bottom: 8px;
+    }
+}
