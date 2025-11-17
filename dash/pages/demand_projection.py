@@ -20,6 +20,16 @@ import numpy as np
 import sys
 import os
 
+# Import application config
+import sys
+import os
+config_path = os.path.join(os.path.dirname(__file__), '..', 'config')
+if config_path not in sys.path:
+    sys.path.insert(0, config_path)
+from app_config import TemplateFiles, DirectoryStructure, InputDemandSheets, LoadCurveSheets
+
+
+
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -1315,8 +1325,8 @@ def fetch_configure_modal_data(n_clicks, active_project, sectors):
                     # Try to get available indicators from Economic_Indicators sheet
                     try:
                         import openpyxl
-                        inputs_dir = os.path.join(active_project['path'], 'inputs')
-                        excel_path = os.path.join(inputs_dir, 'input_demand_file.xlsx')
+                        inputs_dir = os.path.join(active_project['path'], DirectoryStructure.INPUTS)
+                        excel_path = os.path.join(inputs_dir, TemplateFiles.INPUT_DEMAND_FILE)
                         if os.path.exists(excel_path):
                             wb = openpyxl.load_workbook(excel_path, data_only=True)
                             econ_sheet = wb['Economic_Indicators'] if 'Economic_Indicators' in wb.sheetnames else None
@@ -1345,8 +1355,8 @@ def fetch_configure_modal_data(n_clicks, active_project, sectors):
                 # Try to get available indicators from Economic_Indicators sheet
                 try:
                     import openpyxl
-                    inputs_dir = os.path.join(active_project['path'], 'inputs')
-                    excel_path = os.path.join(inputs_dir, 'input_demand_file.xlsx')
+                    inputs_dir = os.path.join(active_project['path'], DirectoryStructure.INPUTS)
+                    excel_path = os.path.join(inputs_dir, TemplateFiles.INPUT_DEMAND_FILE)
                     if os.path.exists(excel_path):
                         wb = openpyxl.load_workbook(excel_path, data_only=True)
                         econ_sheet = wb['Economic_Indicators'] if 'Economic_Indicators' in wb.sheetnames else None
@@ -1803,11 +1813,18 @@ def start_forecasting(n_clicks, scenario_name, target_year, exclude_covid,
     Output('forecast-progress-interval', 'disabled', allow_duplicate=True),
     Input('forecast-progress-interval', 'n_intervals'),
     State('forecast-process-state', 'data'),
+    State('selected-page-store', 'data'),  # CRITICAL FIX: Check current page
     prevent_initial_call=True
 )
-def poll_forecast_progress(n_intervals, process_state):
+def poll_forecast_progress(n_intervals, process_state, current_page):
     """Poll for forecast progress updates from SSE queue"""
-    print(f"[DEBUG] poll_forecast_progress: n_intervals={n_intervals}, process_state={process_state}")
+    print(f"[DEBUG] poll_forecast_progress: n_intervals={n_intervals}, process_state={process_state}, current_page={current_page}")
+
+    # CRITICAL FIX: Stop polling if navigated away from Demand Projection page
+    # This prevents React warnings about updating unmounted components
+    if current_page != 'Demand Projection':
+        print(f"[DEBUG] Not on Demand Projection page (current: {current_page}), disabling interval")
+        return no_update, True  # Disable interval
 
     if not process_state or not process_state.get('process_id'):
         print("[DEBUG] No process_state or process_id, disabling interval")

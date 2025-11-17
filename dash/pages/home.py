@@ -682,7 +682,7 @@ def layout(active_project=None):
             ], style={'display': 'flex', 'alignItems': 'center'})
         ], color='light', style={'marginBottom': '1.25rem', 'borderRadius': '0.5rem'})
 
-    # Stats (only total projects visible; placeholders keep IDs)
+    # Stats - Dynamic counts for projects, forecasts, and profiles
     stats_cards = dbc.Row([
         dbc.Col([
             dbc.Card(dbc.CardBody([
@@ -696,8 +696,29 @@ def layout(active_project=None):
             ]), style={'border': '1px solid rgba(2,6,23,0.04)', 'borderRadius': '0.6rem'})
         ], width=12, md=4),
 
-        html.Div(id='total-forecasts-count', style={'display': 'none'}),
-        html.Div(id='total-profiles-count', style={'display': 'none'})
+        dbc.Col([
+            dbc.Card(dbc.CardBody([
+                html.Div([
+                    html.Div('📈', style={'fontSize': '1.4rem', 'background': 'rgba(236,72,153,0.08)', 'padding': '0.45rem', 'borderRadius': '8px'}),
+                    html.Div([
+                        html.H3('0', id='total-forecasts-count', style={'margin': '0', 'fontWeight': '700', 'color': '#0f172a'}),
+                        html.Div('Forecasts Run', style={'margin': '0', 'color': '#64748b', 'fontSize': '0.9rem'})
+                    ], style={'marginLeft': '0.9rem'})
+                ], style={'display': 'flex', 'alignItems': 'center'})
+            ]), style={'border': '1px solid rgba(2,6,23,0.04)', 'borderRadius': '0.6rem'})
+        ], width=12, md=4),
+
+        dbc.Col([
+            dbc.Card(dbc.CardBody([
+                html.Div([
+                    html.Div('⚡', style={'fontSize': '1.4rem', 'background': 'rgba(234,88,12,0.08)', 'padding': '0.45rem', 'borderRadius': '8px'}),
+                    html.Div([
+                        html.H3('0', id='total-profiles-count', style={'margin': '0', 'fontWeight': '700', 'color': '#0f172a'}),
+                        html.Div('Load Profiles', style={'margin': '0', 'color': '#64748b', 'fontSize': '0.9rem'})
+                    ], style={'marginLeft': '0.9rem'})
+                ], style={'display': 'flex', 'alignItems': 'center'})
+            ]), style={'border': '1px solid rgba(2,6,23,0.04)', 'borderRadius': '0.6rem'})
+        ], width=12, md=4)
     ], className='mb-4')
 
     # Build the dashboard grid layout
@@ -999,3 +1020,53 @@ def open_project(n_clicks_list, projects_data):
 
     # Navigate to Demand Projection
     return updated_project, updated_recent, '/demand-projection'
+
+
+@callback(
+    Output('total-forecasts-count', 'children'),
+    Output('total-profiles-count', 'children'),
+    Input('active-project-store', 'data'),
+    prevent_initial_call=False
+)
+def update_statistics(active_project):
+    """
+    Update statistics for forecasts and profiles based on active project.
+    Scans the project's results directory for generated forecasts and profiles.
+    """
+    if not active_project or not active_project.get('path'):
+        return '0', '0'
+
+    try:
+        from pathlib import Path
+        import sys
+        import os
+
+        # Add config to path for DirectoryStructure
+        config_path = os.path.join(os.path.dirname(__file__), '..', 'config')
+        if config_path not in sys.path:
+            sys.path.insert(0, config_path)
+        from app_config import DirectoryStructure
+
+        project_path = Path(active_project['path'])
+
+        # Count forecasts (scan demand_forecasts directory for scenario folders)
+        forecasts_dir = project_path / DirectoryStructure.RESULTS / DirectoryStructure.DEMAND_FORECASTS
+        forecast_count = 0
+        if forecasts_dir.exists() and forecasts_dir.is_dir():
+            # Each subfolder is a forecast scenario
+            forecast_count = len([d for d in forecasts_dir.iterdir() if d.is_dir()])
+
+        # Count load profiles (scan load_profiles directory for .xlsx files)
+        profiles_dir = project_path / DirectoryStructure.RESULTS / DirectoryStructure.LOAD_PROFILES
+        profile_count = 0
+        if profiles_dir.exists() and profiles_dir.is_dir():
+            # Each .xlsx file is a load profile
+            profile_count = len([f for f in profiles_dir.iterdir() if f.suffix.lower() in {'.xlsx', '.xls', '.xlsm', '.xlsb'}])
+
+        return str(forecast_count), str(profile_count)
+
+    except Exception as e:
+        print(f"Error updating statistics: {e}")
+        import traceback
+        traceback.print_exc()
+        return '0', '0'

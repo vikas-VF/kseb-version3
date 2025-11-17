@@ -29,9 +29,48 @@ if config_path not in sys.path:
 if utils_path not in sys.path:
     sys.path.insert(0, utils_path)
 
-# Import PyPSA network caching and analyzer
-from network_cache import load_network_cached, get_cache_stats, invalidate_network_cache
-from pypsa_analyzer import PyPSASingleNetworkAnalyzer
+# Import application config (CRITICAL - needed for all DirectoryStructure references)
+from app_config import (
+    TemplateFiles,
+    InputDemandSheets,
+    LoadCurveSheets,
+    PyPSASheets,
+    ColumnNames,
+    AppDefaults,
+    DirectoryStructure,
+    DataMarkers,
+    get_project_template_path,
+    get_project_results_path
+)
+
+# PyPSA imports - LAZY LOADED (only when needed to avoid initialization on app start)
+# This prevents NetworkCache from initializing when not on PyPSA pages
+_network_cache_module = None
+_pypsa_analyzer_module = None
+
+def _get_network_cache_module():
+    """Lazy import of network_cache module (only loads when needed)."""
+    global _network_cache_module
+    if _network_cache_module is None:
+        from network_cache import load_network_cached, get_cache_stats, invalidate_network_cache
+        _network_cache_module = {
+            'load_network_cached': load_network_cached,
+            'get_cache_stats': get_cache_stats,
+            'invalidate_network_cache': invalidate_network_cache
+        }
+        logger.info("NetworkCache module loaded (lazy initialization)")
+    return _network_cache_module
+
+def _get_pypsa_analyzer_module():
+    """Lazy import of pypsa_analyzer module (only loads when needed)."""
+    global _pypsa_analyzer_module
+    if _pypsa_analyzer_module is None:
+        from pypsa_analyzer import PyPSASingleNetworkAnalyzer
+        _pypsa_analyzer_module = {
+            'PyPSASingleNetworkAnalyzer': PyPSASingleNetworkAnalyzer
+        }
+        logger.info("PyPSA Analyzer module loaded (lazy initialization)")
+    return _pypsa_analyzer_module
 
 # Import model registry and validator
 try:
@@ -411,19 +450,19 @@ class LocalService:
 
             # Create directory structure
             os.makedirs(project_path, exist_ok=True)
-            os.makedirs(os.path.join(project_path, 'inputs'), exist_ok=True)
-            os.makedirs(os.path.join(project_path, 'results', 'demand_forecasts'), exist_ok=True)
-            os.makedirs(os.path.join(project_path, 'results', 'load_profiles'), exist_ok=True)
-            os.makedirs(os.path.join(project_path, 'results', 'pypsa_optimization'), exist_ok=True)
+            os.makedirs(os.path.join(project_path, DirectoryStructure.INPUTS), exist_ok=True)
+            os.makedirs(os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.DEMAND_FORECASTS), exist_ok=True)
+            os.makedirs(os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.LOAD_PROFILES), exist_ok=True)
+            os.makedirs(os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.PYPSA_OPTIMIZATION), exist_ok=True)
 
             # Copy Excel template files to inputs folder (matching FastAPI behavior)
             template_dir = Path(__file__).parent.parent / 'input'
-            inputs_dir = Path(project_path) / 'inputs'
+            inputs_dir = Path(project_path) / DirectoryStructure.INPUTS
 
             template_files = [
-                'input_demand_file.xlsx',
-                'load_curve_template.xlsx',
-                'pypsa_input_template.xlsx'
+                TemplateFiles.INPUT_DEMAND_FILE,
+                TemplateFiles.LOAD_CURVE_TEMPLATE,
+                TemplateFiles.PYPSA_INPUT_TEMPLATE
             ]
 
             for template_file in template_files:
@@ -487,8 +526,8 @@ class LocalService:
         """
         try:
             # Look for input demand Excel file
-            inputs_dir = os.path.join(project_path, 'inputs')
-            excel_path = os.path.join(inputs_dir, 'input_demand_file.xlsx')
+            inputs_dir = os.path.join(project_path, DirectoryStructure.INPUTS)
+            excel_path = os.path.join(inputs_dir, TemplateFiles.INPUT_DEMAND_FILE)
 
             if not os.path.exists(excel_path):
                 logger.warning(f"input_demand_file.xlsx not found, using default sectors")
@@ -563,8 +602,8 @@ class LocalService:
         This helps filter out empty sectors before forecast configuration.
         """
         try:
-            inputs_dir = os.path.join(project_path, 'inputs')
-            excel_path = os.path.join(inputs_dir, 'input_demand_file.xlsx')
+            inputs_dir = os.path.join(project_path, DirectoryStructure.INPUTS)
+            excel_path = os.path.join(inputs_dir, TemplateFiles.INPUT_DEMAND_FILE)
 
             if not os.path.exists(excel_path):
                 return {
@@ -661,8 +700,8 @@ class LocalService:
         3. Merge with economic indicator values from 'Economic_Indicators' sheet
         """
         try:
-            inputs_dir = os.path.join(project_path, 'inputs')
-            excel_path = os.path.join(inputs_dir, 'input_demand_file.xlsx')
+            inputs_dir = os.path.join(project_path, DirectoryStructure.INPUTS)
+            excel_path = os.path.join(inputs_dir, TemplateFiles.INPUT_DEMAND_FILE)
 
             if not os.path.exists(excel_path):
                 return {'success': False, 'error': 'input_demand_file.xlsx not found'}
@@ -813,7 +852,7 @@ class LocalService:
             Dictionary mapping sector name to percentage share (e.g., {"Agriculture": 5.5})
         """
         try:
-            excel_path = os.path.join(project_path, 'inputs', 'input_demand_file.xlsx')
+            excel_path = os.path.join(project_path, DirectoryStructure.INPUTS, TemplateFiles.INPUT_DEMAND_FILE)
 
             if not os.path.exists(excel_path):
                 logger.warning(f"input_demand_file.xlsx not found at: {excel_path}")
@@ -909,7 +948,7 @@ class LocalService:
         then consolidates the data into a single table (matching FastAPI logic).
         """
         try:
-            excel_path = os.path.join(project_path, 'inputs', 'input_demand_file.xlsx')
+            excel_path = os.path.join(project_path, DirectoryStructure.INPUTS, TemplateFiles.INPUT_DEMAND_FILE)
 
             if not os.path.exists(excel_path):
                 return {'success': False, 'error': 'input_demand_file.xlsx not found'}
@@ -1137,7 +1176,7 @@ class LocalService:
             logger.info(f"Starting demand forecast with config: {config}")
 
             # Create scenario results directory
-            scenario_path = Path(project_path) / "results" / "demand_forecasts" / config['scenario_name']
+            scenario_path = Path(project_path) / DirectoryStructure.RESULTS / DirectoryStructure.DEMAND_FORECASTS / config['scenario_name']
             scenario_path.mkdir(parents=True, exist_ok=True)
 
             # Prepare configuration for Python script (matching FastAPI format)
@@ -1535,7 +1574,7 @@ class LocalService:
 
     def cancel_pypsa_model(self, process_id: str) -> Dict:
         """
-        Cancel PyPSA optimization process
+        Cancel PyPSA optimization process (thread-based)
 
         Args:
             process_id: Process identifier
@@ -1556,40 +1595,32 @@ class LocalService:
             return format_error('process_not_found', f'Process ID: {process_id}')
 
         proc_info = pypsa_solver_processes[process_id]
-        process = proc_info['process']
         print(f"[DEBUG] Found process info: {proc_info.keys()}")
-        print(f"[DEBUG] Process poll status: {process.poll()}")
 
         try:
             # Check if already finished
-            if process.poll() is not None:
-                print(f"[DEBUG] Process already completed")
-                cleanup_process(process_id, 'pypsa')
+            current_status = proc_info.get('status')
+            if current_status in ['completed', 'failed', 'cancelled']:
+                print(f"[DEBUG] Process already finished with status: {current_status}")
                 return {
                     'success': True,
-                    'message': 'Process already completed'
+                    'message': f'Process already {current_status}'
                 }
 
             logger.info(f"Cancelling PyPSA optimization process: {process_id}")
-            print(f"[DEBUG] Calling process.terminate() on PID: {process.pid}")
 
-            # Try graceful termination
-            process.terminate()
-            print(f"[DEBUG] process.terminate() called successfully")
+            # NOTE: Python threads cannot be forcefully terminated
+            # We mark as cancelled and the thread will finish naturally
+            proc_info['status'] = 'cancelled'
+            proc_info['logs'].append({
+                'timestamp': time.strftime('%H:%M:%S'),
+                'level': 'warning',
+                'text': '⚠️ Cancellation requested - waiting for current operation to complete...'
+            })
 
-            try:
-                print(f"[DEBUG] Waiting up to 5 seconds for graceful shutdown...")
-                process.wait(timeout=5)
-                logger.info(f"Process {process_id} terminated gracefully")
-                print(f"[DEBUG] Process terminated gracefully")
-            except subprocess.TimeoutExpired:
-                print(f"[DEBUG] Graceful termination timed out, calling process.kill()")
-                process.kill()
-                process.wait()
-                logger.info(f"Process {process_id} killed")
-                print(f"[DEBUG] Process killed successfully")
+            print(f"[DEBUG] Marked process as cancelled")
 
-            # Send cancellation event to SSE queue
+            # Send cancellation event to SSE queue (if used)
             print(f"[DEBUG] Sending cancellation event to pypsa_solver_sse_queue")
             pypsa_solver_sse_queue.put({
                 'type': 'end',
@@ -1598,11 +1629,6 @@ class LocalService:
                 'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
             })
             print(f"[DEBUG] SSE cancellation event sent")
-
-            # Cleanup
-            print(f"[DEBUG] Calling cleanup_process for {process_id}")
-            cleanup_process(process_id, 'pypsa')
-            print(f"[DEBUG] cleanup_process completed")
 
             result = {
                 'success': True,
@@ -1623,7 +1649,7 @@ class LocalService:
     def get_scenarios(self, project_path: str) -> Dict:
         """List all forecast scenarios"""
         try:
-            scenarios_dir = os.path.join(project_path, 'results', 'demand_forecasts')
+            scenarios_dir = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.DEMAND_FORECASTS)
 
             if not os.path.exists(scenarios_dir):
                 return {'scenarios': []}
@@ -1643,7 +1669,7 @@ class LocalService:
         Each sector has its own .xlsx file (e.g., Agriculture.xlsx, Domestic_lt.xlsx)
         """
         try:
-            scenario_dir = os.path.join(project_path, 'results', 'demand_forecasts', scenario_name)
+            scenario_dir = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.DEMAND_FORECASTS, scenario_name)
 
             if not os.path.exists(scenario_dir):
                 logger.warning(f"Scenario directory not found: {scenario_dir}")
@@ -1684,7 +1710,7 @@ class LocalService:
         }
         """
         try:
-            scenario_dir = os.path.join(project_path, 'results', 'demand_forecasts', scenario_name)
+            scenario_dir = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.DEMAND_FORECASTS, scenario_name)
             excel_path = os.path.join(scenario_dir, f'{sector_name}.xlsx')
 
             if not os.path.exists(excel_path):
@@ -1750,7 +1776,7 @@ class LocalService:
             {'profiles': ['ProfileA', 'ProfileB', ...]}
         """
         try:
-            profiles_dir = Path(project_path) / "results" / "load_profiles"
+            profiles_dir = Path(project_path) / DirectoryStructure.RESULTS / DirectoryStructure.LOAD_PROFILES
 
             if not profiles_dir.exists() or not profiles_dir.is_dir():
                 logger.info(f"Load profiles directory not found: {profiles_dir}")
@@ -1788,7 +1814,7 @@ class LocalService:
         Useful if frontend wants labels, original filenames, or modification times.
         """
         try:
-            profiles_dir = Path(project_path) / "results" / "load_profiles"
+            profiles_dir = Path(project_path) / DirectoryStructure.RESULTS / DirectoryStructure.LOAD_PROFILES
             if not profiles_dir.exists() or not profiles_dir.is_dir():
                 return {'profiles': []}
 
@@ -1823,7 +1849,7 @@ class LocalService:
             logger.info(f"Starting profile generation for: {profile_name}")
 
             # Create profile results directory
-            profile_dir = Path(project_path) / "results" / "load_profiles"
+            profile_dir = Path(project_path) / DirectoryStructure.RESULTS / DirectoryStructure.LOAD_PROFILES
             profile_dir.mkdir(parents=True, exist_ok=True)
 
             # Save config for subprocess
@@ -2016,7 +2042,7 @@ class LocalService:
     def get_pypsa_scenarios(self, project_path: str) -> Dict:
         """List all PyPSA scenarios"""
         try:
-            pypsa_dir = os.path.join(project_path, 'results', 'pypsa_optimization')
+            pypsa_dir = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.PYPSA_OPTIMIZATION)
 
             if not os.path.exists(pypsa_dir):
                 return {'scenarios': []}
@@ -2030,28 +2056,194 @@ class LocalService:
             logger.error(f"Error getting PyPSA scenarios: {e}")
             return {'scenarios': []}
 
-    def run_pypsa_model(self, config: Dict) -> Dict:
-        """Execute PyPSA model"""
+    def run_pypsa_model(self, config: Dict, process_id: str = None) -> Dict:
+        """
+        Execute PyPSA model asynchronously in background thread.
+
+        Args:
+            config: Model configuration dict containing:
+                - project_path: Project folder path
+                - scenario_name: Scenario name
+                - solver: Solver name (e.g., 'highs')
+            process_id: Unique process identifier (required for tracking)
+
+        Returns:
+            Dict with success status and process_id
+        """
+        global pypsa_solver_processes
+
         try:
-            # Import PyPSA model executor
-            import sys
-            models_path = os.path.join(os.path.dirname(__file__), '..', 'models')
-            if models_path not in sys.path:
-                sys.path.insert(0, models_path)
+            # Validate required parameters
+            if not process_id:
+                return {'success': False, 'error': 'process_id is required'}
 
-            from pypsa_model_executor import run_pypsa_model_complete
+            project_path = config.get('project_path')
+            scenario_name = config.get('scenario_name')
 
-            # Execute PyPSA optimization
-            results = run_pypsa_model_complete(config)
+            if not project_path or not scenario_name:
+                return {'success': False, 'error': 'project_path and scenario_name are required'}
+
+            # Validate project path exists
+            if not os.path.exists(project_path):
+                return {'success': False, 'error': f'Project path does not exist: {project_path}'}
+
+            # Validate input file exists (pypsa_input_template.xlsx)
+            input_file = os.path.join(project_path, DirectoryStructure.INPUTS, 'pypsa_input_template.xlsx')
+            if not os.path.exists(input_file):
+                return {
+                    'success': False,
+                    'error': 'pypsa_input_template.xlsx not found in inputs folder. Please ensure input data exists.'
+                }
+
+            # Check if process already running
+            if process_id in pypsa_solver_processes:
+                proc_info = pypsa_solver_processes[process_id]
+                if proc_info.get('status') == 'running':
+                    return {'success': False, 'error': 'A model is already running with this process ID'}
+
+            # Initialize process info
+            pypsa_solver_processes[process_id] = {
+                'status': 'running',
+                'progress': 0,
+                'message': 'Starting PyPSA model execution...',
+                'logs': [],
+                'start_time': time.time(),
+                'config': config,
+                'error': None,
+                'results': None
+            }
+
+            # Start execution in background thread
+            def run_model_thread():
+                """Background thread for PyPSA model execution"""
+                try:
+                    # Import PyPSA model executor
+                    import sys
+                    models_path = os.path.join(os.path.dirname(__file__), '..', 'models')
+                    if models_path not in sys.path:
+                        sys.path.insert(0, models_path)
+
+                    from pypsa_model_executor import run_pypsa_model_complete
+
+                    # Update progress
+                    pypsa_solver_processes[process_id]['progress'] = 10
+                    pypsa_solver_processes[process_id]['message'] = 'Initializing PyPSA model...'
+                    pypsa_solver_processes[process_id]['logs'].append({
+                        'timestamp': time.strftime('%H:%M:%S'),
+                        'level': 'info',
+                        'text': f'Starting PyPSA optimization for scenario: {scenario_name}'
+                    })
+
+                    # Execute PyPSA optimization (blocking call)
+                    # NOTE: This is synchronous and cannot be interrupted mid-execution
+                    logger.info(f"[PyPSA {process_id}] Starting model execution")
+                    results = run_pypsa_model_complete(config)
+
+                    # Check if cancelled during execution
+                    if pypsa_solver_processes[process_id].get('status') == 'cancelled':
+                        logger.info(f"[PyPSA {process_id}] Execution completed but was cancelled")
+                        pypsa_solver_processes[process_id]['logs'].append({
+                            'timestamp': time.strftime('%H:%M:%S'),
+                            'level': 'warning',
+                            'text': '⚠️ Model execution completed but was cancelled by user'
+                        })
+                        return  # Exit thread
+
+                    # Update with results
+                    if results.get('success'):
+                        pypsa_solver_processes[process_id]['status'] = 'completed'
+                        pypsa_solver_processes[process_id]['progress'] = 100
+                        pypsa_solver_processes[process_id]['message'] = 'Model execution completed successfully!'
+                        pypsa_solver_processes[process_id]['results'] = results
+                        pypsa_solver_processes[process_id]['logs'].append({
+                            'timestamp': time.strftime('%H:%M:%S'),
+                            'level': 'success',
+                            'text': '✅ Model execution completed successfully!'
+                        })
+                        logger.info(f"[PyPSA {process_id}] Completed successfully")
+                    else:
+                        pypsa_solver_processes[process_id]['status'] = 'failed'
+                        pypsa_solver_processes[process_id]['error'] = results.get('error', 'Unknown error')
+                        pypsa_solver_processes[process_id]['logs'].append({
+                            'timestamp': time.strftime('%H:%M:%S'),
+                            'level': 'error',
+                            'text': f'❌ Error: {results.get("error", "Unknown error")}'
+                        })
+                        logger.error(f"[PyPSA {process_id}] Failed: {results.get('error')}")
+
+                except Exception as e:
+                    # Check if cancelled before updating status
+                    if pypsa_solver_processes[process_id].get('status') != 'cancelled':
+                        pypsa_solver_processes[process_id]['status'] = 'failed'
+                        pypsa_solver_processes[process_id]['error'] = str(e)
+                        pypsa_solver_processes[process_id]['logs'].append({
+                            'timestamp': time.strftime('%H:%M:%S'),
+                            'level': 'error',
+                            'text': f'❌ Fatal error: {str(e)}'
+                        })
+                        logger.error(f"[PyPSA {process_id}] Exception: {e}")
+                        import traceback
+                        traceback.print_exc()
+
+            # Start background thread
+            import threading
+            thread = threading.Thread(target=run_model_thread, daemon=True, name=f'pypsa-{process_id}')
+            thread.start()
+
+            # Store thread reference
+            pypsa_solver_processes[process_id]['thread'] = thread
+
+            logger.info(f"PyPSA model execution started in background: {process_id}")
 
             return {
                 'success': True,
-                'process_id': 'local_pypsa',
-                'results': results
+                'process_id': process_id,
+                'message': f'Model execution started for scenario: {scenario_name}'
             }
 
         except Exception as e:
-            logger.error(f"Error running PyPSA model: {e}")
+            logger.error(f"Error starting PyPSA model: {e}")
+            return {'success': False, 'error': str(e)}
+
+    def get_pypsa_progress(self, process_id: str) -> Dict:
+        """
+        Get current progress of PyPSA model execution.
+
+        Args:
+            process_id: Process identifier
+
+        Returns:
+            Dict containing:
+                - success: bool
+                - status: 'running', 'completed', 'failed'
+                - progress: int (0-100)
+                - message: str
+                - logs: list of log entries
+                - error: str (if failed)
+        """
+        global pypsa_solver_processes
+
+        try:
+            if process_id not in pypsa_solver_processes:
+                return {
+                    'success': False,
+                    'error': f'Process not found: {process_id}'
+                }
+
+            proc_info = pypsa_solver_processes[process_id]
+
+            return {
+                'success': True,
+                'status': proc_info.get('status', 'unknown'),
+                'progress': proc_info.get('progress', 0),
+                'message': proc_info.get('message', ''),
+                'logs': proc_info.get('logs', []),
+                'error': proc_info.get('error'),
+                'results': proc_info.get('results')
+            }
+
+        except Exception as e:
+            logger.error(f"Error getting PyPSA progress: {e}")
             return {'success': False, 'error': str(e)}
 
     # ==================== T&D LOSSES ====================
@@ -2062,7 +2254,7 @@ class LocalService:
         Matches React backend structure: [{year: X, loss: Y}, ...]
         """
         try:
-            scenario_dir = os.path.join(project_path, 'results', 'demand_forecasts', scenario_name)
+            scenario_dir = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.DEMAND_FORECASTS, scenario_name)
             td_losses_file = os.path.join(scenario_dir, 'td_losses.json')
 
             if os.path.exists(td_losses_file):
@@ -2086,7 +2278,7 @@ class LocalService:
             loss_points: List of {year: int, loss: float} dicts
         """
         try:
-            scenario_dir = os.path.join(project_path, 'results', 'demand_forecasts', scenario_name)
+            scenario_dir = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.DEMAND_FORECASTS, scenario_name)
             os.makedirs(scenario_dir, exist_ok=True)
 
             td_losses_file = os.path.join(scenario_dir, 'td_losses.json')
@@ -2108,7 +2300,7 @@ class LocalService:
     def get_scenario_metadata(self, project_path: str, scenario_name: str) -> Dict:
         """Get scenario metadata from scenario_meta.json"""
         try:
-            scenario_dir = os.path.join(project_path, 'results', 'demand_forecasts', scenario_name)
+            scenario_dir = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.DEMAND_FORECASTS, scenario_name)
 
             # Try scenario_meta.json first (actual filename), then metadata.json (fallback)
             meta_file = os.path.join(scenario_dir, 'scenario_meta.json')
@@ -2144,7 +2336,7 @@ class LocalService:
             Dictionary mapping sector name to percentage share (e.g., {"Agriculture": 5.5})
         """
         try:
-            file_path = os.path.join(project_path, 'inputs', 'input_demand_file.xlsx')
+            file_path = os.path.join(project_path, DirectoryStructure.INPUTS, TemplateFiles.INPUT_DEMAND_FILE)
 
             if not os.path.exists(file_path):
                 logger.warning(f"[read_solar_share_data] Excel file not found at: {file_path}")
@@ -2297,7 +2489,7 @@ class LocalService:
             Dict with 'success' and 'data' (list of records with Year and sector columns)
         """
         try:
-            scenario_dir = os.path.join(project_path, 'results', 'demand_forecasts', scenario_name)
+            scenario_dir = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.DEMAND_FORECASTS, scenario_name)
 
             if not os.path.exists(scenario_dir):
                 return {'success': False, 'error': 'Scenario folder not found'}
@@ -2448,7 +2640,7 @@ class LocalService:
             import openpyxl
             from openpyxl.styles import Font
 
-            scenario_dir = os.path.join(project_path, 'results', 'demand_forecasts', scenario_name)
+            scenario_dir = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.DEMAND_FORECASTS, scenario_name)
             os.makedirs(scenario_dir, exist_ok=True)
 
             # IMPORTANT: Save as Consolidated_Results.xlsx (not forecast_results.xlsx)
@@ -2503,7 +2695,7 @@ class LocalService:
     def get_pypsa_networks(self, project_path: str, scenario_name: str) -> Dict:
         """List all .nc network files in PyPSA scenario folder"""
         try:
-            pypsa_dir = os.path.join(project_path, 'results', 'pypsa_optimization', scenario_name)
+            pypsa_dir = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.PYPSA_OPTIMIZATION, scenario_name)
 
             if not os.path.exists(pypsa_dir):
                 return {'networks': []}
@@ -2521,14 +2713,14 @@ class LocalService:
         try:
             import pypsa
 
-            network_path = os.path.join(project_path, 'results', 'pypsa_optimization',
+            network_path = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.PYPSA_OPTIMIZATION,
                                        scenario_name, network_file)
 
             if not os.path.exists(network_path):
                 return {'success': False, 'error': 'Network file not found'}
 
             # Load network with caching for 10-100x performance improvement
-            network = load_network_cached(network_path)
+            network = _get_network_cache_module()['load_network_cached'](network_path)
 
             # Extract metadata
             info = {
@@ -2559,11 +2751,11 @@ class LocalService:
         try:
             import pypsa
 
-            network_path = os.path.join(project_path, 'results', 'pypsa_optimization',
+            network_path = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.PYPSA_OPTIMIZATION,
                                        scenario_name, network_file)
 
             # Use cached network loading for 10-100x performance improvement
-            network = load_network_cached(network_path)
+            network = _get_network_cache_module()['load_network_cached'](network_path)
 
             return {
                 'success': True,
@@ -2579,11 +2771,11 @@ class LocalService:
         try:
             import pypsa
 
-            network_path = os.path.join(project_path, 'results', 'pypsa_optimization',
+            network_path = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.PYPSA_OPTIMIZATION,
                                        scenario_name, network_file)
 
             # Use cached network loading for 10-100x performance improvement
-            network = load_network_cached(network_path)
+            network = _get_network_cache_module()['load_network_cached'](network_path)
 
             return {
                 'success': True,
@@ -2599,11 +2791,11 @@ class LocalService:
         try:
             import pypsa
 
-            network_path = os.path.join(project_path, 'results', 'pypsa_optimization',
+            network_path = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.PYPSA_OPTIMIZATION,
                                        scenario_name, network_file)
 
             # Use cached network loading for 10-100x performance improvement
-            network = load_network_cached(network_path)
+            network = _get_network_cache_module()['load_network_cached'](network_path)
 
             return {
                 'success': True,
@@ -2619,11 +2811,11 @@ class LocalService:
         try:
             import pypsa
 
-            network_path = os.path.join(project_path, 'results', 'pypsa_optimization',
+            network_path = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.PYPSA_OPTIMIZATION,
                                        scenario_name, network_file)
 
             # Use cached network loading for 10-100x performance improvement
-            network = load_network_cached(network_path)
+            network = _get_network_cache_module()['load_network_cached'](network_path)
 
             return {
                 'success': True,
@@ -2639,11 +2831,11 @@ class LocalService:
         try:
             import pypsa
 
-            network_path = os.path.join(project_path, 'results', 'pypsa_optimization',
+            network_path = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.PYPSA_OPTIMIZATION,
                                        scenario_name, network_file)
 
             # Use cached network loading for 10-100x performance improvement
-            network = load_network_cached(network_path)
+            network = _get_network_cache_module()['load_network_cached'](network_path)
 
             return {
                 'success': True,
@@ -2659,11 +2851,11 @@ class LocalService:
         try:
             import pypsa
 
-            network_path = os.path.join(project_path, 'results', 'pypsa_optimization',
+            network_path = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.PYPSA_OPTIMIZATION,
                                        scenario_name, network_file)
 
             # Use cached network loading for 10-100x performance improvement
-            network = load_network_cached(network_path)
+            network = _get_network_cache_module()['load_network_cached'](network_path)
 
             analysis = {
                 'success': True,
@@ -2713,11 +2905,11 @@ class LocalService:
         try:
             import pypsa
 
-            network_path = os.path.join(project_path, 'results', 'pypsa_optimization',
+            network_path = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.PYPSA_OPTIMIZATION,
                                        scenario_name, network_file)
 
             # Use cached network loading for 10-100x performance improvement
-            network = load_network_cached(network_path)
+            network = _get_network_cache_module()['load_network_cached'](network_path)
 
             years = []
             if hasattr(network, 'investment_periods') and len(network.investment_periods) > 0:
@@ -2738,11 +2930,11 @@ class LocalService:
         try:
             import pypsa
 
-            network_path = os.path.join(project_path, 'results', 'pypsa_optimization',
+            network_path = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.PYPSA_OPTIMIZATION,
                                        scenario_name, network_file)
 
             # Use cached network loading for 10-100x performance improvement
-            network = load_network_cached(network_path)
+            network = _get_network_cache_module()['load_network_cached'](network_path)
 
             availability = {
                 'dispatch': hasattr(network, 'generators_t') and hasattr(network.generators_t, 'p'),
@@ -2763,7 +2955,7 @@ class LocalService:
 
     def _get_network_path(self, project_path: str, scenario_name: str, network_file: str) -> str:
         """Helper to construct network path"""
-        return os.path.join(project_path, 'results', 'pypsa_optimization',
+        return os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.PYPSA_OPTIMIZATION,
                            scenario_name, network_file)
 
     def analyze_pypsa_network(self, project_path: str, scenario_name: str, network_file: str) -> Dict:
@@ -2781,10 +2973,10 @@ class LocalService:
         """
         try:
             network_path = self._get_network_path(project_path, scenario_name, network_file)
-            network = load_network_cached(network_path)
+            network = _get_network_cache_module()['load_network_cached'](network_path)
 
             # Create analyzer instance for this network
-            analyzer = PyPSASingleNetworkAnalyzer(network)
+            analyzer = _get_pypsa_analyzer_module()['PyPSASingleNetworkAnalyzer'](network)
             # Run all available analyses
             analysis = analyzer.run_all_analyses()
 
@@ -2800,10 +2992,10 @@ class LocalService:
         """Get energy generation mix by carrier (solar, wind, hydro, etc.)"""
         try:
             network_path = self._get_network_path(project_path, scenario_name, network_file)
-            network = load_network_cached(network_path)
+            network = _get_network_cache_module()['load_network_cached'](network_path)
 
             # Create analyzer instance for this network
-            analyzer = PyPSASingleNetworkAnalyzer(network)
+            analyzer = _get_pypsa_analyzer_module()['PyPSASingleNetworkAnalyzer'](network)
             energy_mix = analyzer.get_energy_mix()
 
             return {
@@ -2818,10 +3010,10 @@ class LocalService:
         """Get capacity utilization factors (CUF) for all generators"""
         try:
             network_path = self._get_network_path(project_path, scenario_name, network_file)
-            network = load_network_cached(network_path)
+            network = _get_network_cache_module()['load_network_cached'](network_path)
 
             # Create analyzer instance for this network
-            analyzer = PyPSASingleNetworkAnalyzer(network)
+            analyzer = _get_pypsa_analyzer_module()['PyPSASingleNetworkAnalyzer'](network)
             capacity_factors = analyzer.get_capacity_factors()
 
             return {
@@ -2836,10 +3028,10 @@ class LocalService:
         """Get renewable energy penetration percentage"""
         try:
             network_path = self._get_network_path(project_path, scenario_name, network_file)
-            network = load_network_cached(network_path)
+            network = _get_network_cache_module()['load_network_cached'](network_path)
 
             # Create analyzer instance for this network
-            analyzer = PyPSASingleNetworkAnalyzer(network)
+            analyzer = _get_pypsa_analyzer_module()['PyPSASingleNetworkAnalyzer'](network)
             renewable_share = analyzer.get_renewable_share()
 
             return {
@@ -2854,10 +3046,10 @@ class LocalService:
         """Get CO2 emissions by carrier and total"""
         try:
             network_path = self._get_network_path(project_path, scenario_name, network_file)
-            network = load_network_cached(network_path)
+            network = _get_network_cache_module()['load_network_cached'](network_path)
 
             # Create analyzer instance for this network
-            analyzer = PyPSASingleNetworkAnalyzer(network)
+            analyzer = _get_pypsa_analyzer_module()['PyPSASingleNetworkAnalyzer'](network)
             emissions = analyzer.get_emissions_tracking()
 
             return {
@@ -2872,10 +3064,10 @@ class LocalService:
         """Get total system costs breakdown (capital, operational, fuel)"""
         try:
             network_path = self._get_network_path(project_path, scenario_name, network_file)
-            network = load_network_cached(network_path)
+            network = _get_network_cache_module()['load_network_cached'](network_path)
 
             # Create analyzer instance for this network
-            analyzer = PyPSASingleNetworkAnalyzer(network)
+            analyzer = _get_pypsa_analyzer_module()['PyPSASingleNetworkAnalyzer'](network)
             system_costs = analyzer.get_system_costs()
 
             return {
@@ -2890,10 +3082,10 @@ class LocalService:
         """Get hourly dispatch profiles by generator"""
         try:
             network_path = self._get_network_path(project_path, scenario_name, network_file)
-            network = load_network_cached(network_path)
+            network = _get_network_cache_module()['load_network_cached'](network_path)
 
             # Create analyzer instance for this network
-            analyzer = PyPSASingleNetworkAnalyzer(network)
+            analyzer = _get_pypsa_analyzer_module()['PyPSASingleNetworkAnalyzer'](network)
             dispatch = analyzer.get_dispatch_data()
 
             return {
@@ -2908,10 +3100,10 @@ class LocalService:
         """Get installed capacity by carrier"""
         try:
             network_path = self._get_network_path(project_path, scenario_name, network_file)
-            network = load_network_cached(network_path)
+            network = _get_network_cache_module()['load_network_cached'](network_path)
 
             # Create analyzer instance for this network
-            analyzer = PyPSASingleNetworkAnalyzer(network)
+            analyzer = _get_pypsa_analyzer_module()['PyPSASingleNetworkAnalyzer'](network)
             capacities = analyzer.get_total_capacities()
 
             return {
@@ -2926,7 +3118,7 @@ class LocalService:
         """Get storage units information"""
         try:
             network_path = self._get_network_path(project_path, scenario_name, network_file)
-            network = load_network_cached(network_path)
+            network = _get_network_cache_module()['load_network_cached'](network_path)
 
             # Get storage units data directly from network
             storage_data = {}
@@ -2966,7 +3158,7 @@ class LocalService:
         """
         try:
             network_path = self._get_network_path(project_path, scenario_name, network_file)
-            network = load_network_cached(network_path)
+            network = _get_network_cache_module()['load_network_cached'](network_path)
 
             # Check if snapshots are MultiIndex (multi-period indicator)
             import pandas as pd
@@ -3028,7 +3220,7 @@ class LocalService:
         """
         try:
             network_path = self._get_network_path(project_path, scenario_name, network_file)
-            network = load_network_cached(network_path)
+            network = _get_network_cache_module()['load_network_cached'](network_path)
 
             import pandas as pd
             is_multi_period = isinstance(network.snapshots, pd.MultiIndex)
@@ -3098,7 +3290,7 @@ class LocalService:
         """
         try:
             network_path = self._get_network_path(project_path, scenario_name, network_file)
-            network = load_network_cached(network_path)
+            network = _get_network_cache_module()['load_network_cached'](network_path)
 
             import pandas as pd
             is_multi_period = isinstance(network.snapshots, pd.MultiIndex)
@@ -3144,7 +3336,7 @@ class LocalService:
     def get_analysis_data(self, project_path: str, profile_name: str) -> Dict:
         """Get monthly/seasonal analysis data for load profile"""
         try:
-            profile_dir = os.path.join(project_path, 'results', 'load_profiles', profile_name)
+            profile_dir = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.LOAD_PROFILES, profile_name)
 
             # Check for pre-computed statistics
             stats_file = os.path.join(profile_dir, 'statistics.json')
@@ -3183,7 +3375,7 @@ class LocalService:
     def get_profile_years(self, project_path: str, profile_name: str) -> Dict:
         """Get fiscal years available in load profile"""
         try:
-            csv_file = os.path.join(project_path, 'results', 'load_profiles', profile_name, 'hourly_profile.csv')
+            csv_file = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.LOAD_PROFILES, profile_name, 'hourly_profile.csv')
 
             if not os.path.exists(csv_file):
                 return {'years': []}
@@ -3206,7 +3398,7 @@ class LocalService:
     def get_load_duration_curve(self, project_path: str, profile_name: str, fiscal_year: str) -> Dict:
         """Get load duration curve data (sorted loads)"""
         try:
-            csv_file = os.path.join(project_path, 'results', 'load_profiles', profile_name, 'hourly_profile.csv')
+            csv_file = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.LOAD_PROFILES, profile_name, 'hourly_profile.csv')
 
             df = pd.read_csv(csv_file)
 
@@ -3238,7 +3430,7 @@ class LocalService:
                               season: Optional[str] = None) -> Dict:
         """Get full hourly load profile data with optional filters"""
         try:
-            csv_file = os.path.join(project_path, 'results', 'load_profiles', profile_name, 'hourly_profile.csv')
+            csv_file = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.LOAD_PROFILES, profile_name, 'hourly_profile.csv')
 
             df = pd.read_csv(csv_file, parse_dates=['Timestamp'] if 'Timestamp' in pd.read_csv(csv_file, nrows=1).columns else None)
 
@@ -3279,7 +3471,7 @@ class LocalService:
             - Total energy (MWh)
         """
         try:
-            csv_file = os.path.join(project_path, 'results', 'load_profiles', profile_name, 'hourly_profile.csv')
+            csv_file = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.LOAD_PROFILES, profile_name, 'hourly_profile.csv')
 
             if not os.path.exists(csv_file):
                 return {'success': False, 'error': 'Profile CSV not found'}
@@ -3376,7 +3568,7 @@ class LocalService:
             - Number of hours
         """
         try:
-            csv_file = os.path.join(project_path, 'results', 'load_profiles', profile_name, 'hourly_profile.csv')
+            csv_file = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.LOAD_PROFILES, profile_name, 'hourly_profile.csv')
 
             if not os.path.exists(csv_file):
                 return {'success': False, 'error': 'Profile CSV not found'}
@@ -3457,7 +3649,7 @@ class LocalService:
 
         EXACT IMPLEMENTATION FROM FASTAPI:
         - File: inputs/load_curve_template.xlsx
-        - Sheet: 'Past_Hourly_Demand' (case-insensitive)
+        - Sheet: LoadCurveSheets.PAST_HOURLY_DEMAND (case-insensitive)
         - Column: 'date' (case-insensitive)
         - Extract financial years from dates (Apr-Mar cycle)
         - Return format: ['FY2021', 'FY2022', ...]
@@ -3466,7 +3658,7 @@ class LocalService:
             import openpyxl
             from datetime import datetime
 
-            file_path = os.path.join(project_path, 'inputs', 'load_curve_template.xlsx')
+            file_path = os.path.join(project_path, DirectoryStructure.INPUTS, TemplateFiles.LOAD_CURVE_TEMPLATE)
 
             if not os.path.exists(file_path):
                 logger.warning(f"load_curve_template.xlsx not found at: {file_path}")
@@ -3482,7 +3674,7 @@ class LocalService:
 
             if not sheet_name:
                 workbook.close()
-                logger.error("Sheet 'Past_Hourly_Demand' not found in load_curve_template.xlsx")
+                logger.error("Sheet LoadCurveSheets.PAST_HOURLY_DEMAND not found in load_curve_template.xlsx")
                 return {'success': False, 'years': []}
 
             worksheet = workbook[sheet_name]
@@ -3506,7 +3698,7 @@ class LocalService:
 
             if not date_header:
                 workbook.close()
-                logger.error("Column 'date' not found in 'Past_Hourly_Demand' sheet")
+                logger.error("Column 'date' not found in LoadCurveSheets.PAST_HOURLY_DEMAND sheet")
                 return {'success': False, 'years': []}
 
             # Extract financial years (Apr-Mar cycle) - EXACT MATCH TO FASTAPI
@@ -3556,7 +3748,7 @@ class LocalService:
         try:
             from pathlib import Path
 
-            scenarios_parent_path = Path(project_path) / "results" / "demand_forecasts"
+            scenarios_parent_path = Path(project_path) / DirectoryStructure.RESULTS / DirectoryStructure.DEMAND_FORECASTS
 
             if not scenarios_parent_path.exists():
                 return {'success': True, 'scenarios': []}
@@ -3590,7 +3782,7 @@ class LocalService:
         """
         try:
             # FIXED: Check for .xlsx file (not directory)
-            file_path = os.path.join(project_path, 'results', 'load_profiles', f"{profile_name}.xlsx")
+            file_path = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.LOAD_PROFILES, f"{profile_name}.xlsx")
             exists = os.path.exists(file_path)
 
             return {'exists': exists}
@@ -3602,7 +3794,7 @@ class LocalService:
     def save_model_config(self, project_path: str, config: Dict) -> Dict:
         """Save PyPSA model configuration"""
         try:
-            config_dir = os.path.join(project_path, 'results', 'pypsa_optimization')
+            config_dir = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.PYPSA_OPTIMIZATION)
             os.makedirs(config_dir, exist_ok=True)
 
             config_file = os.path.join(config_dir, 'model_config.json')
@@ -3637,7 +3829,7 @@ class LocalService:
                          If None, clears entire cache.
         """
         try:
-            invalidate_network_cache(network_path)
+            _get_network_cache_module()['invalidate_network_cache'](network_path)
             message = f"Cache cleared for {network_path}" if network_path else "Entire cache cleared"
             return {
                 'success': True,
@@ -3846,7 +4038,7 @@ class LocalService:
                 'success': True,
                 'models': {
                     'Agriculture': ['Historical', 'MLR', 'SLR', 'WAM'],
-                    'Domestic_lt': ['Historical', 'MLR', 'SLR', 'User Data'],
+                    InputDemandSheets.DOMESTIC_LT: ['Historical', 'MLR', 'SLR', 'User Data'],
                     ...
                 }
             }
@@ -3868,7 +4060,7 @@ class LocalService:
             for sector in sectors:
                 try:
                     # Read the actual Excel file to see what models exist
-                    scenario_dir = os.path.join(project_path, 'results', 'demand_forecasts', scenario)
+                    scenario_dir = os.path.join(project_path, DirectoryStructure.RESULTS, DirectoryStructure.DEMAND_FORECASTS, scenario)
                     excel_path = os.path.join(scenario_dir, f'{sector}.xlsx')
 
                     if not os.path.exists(excel_path):

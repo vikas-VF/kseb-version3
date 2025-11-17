@@ -23,6 +23,16 @@ import sys
 import os
 from datetime import datetime
 
+# Import application config
+import sys
+import os
+config_path = os.path.join(os.path.dirname(__file__), '..', 'config')
+if config_path not in sys.path:
+    sys.path.insert(0, config_path)
+from app_config import TemplateFiles, DirectoryStructure, InputDemandSheets, LoadCurveSheets
+
+
+
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -65,7 +75,7 @@ def has_solar_rooftop_in_project(project_path, sectors):
     has_solar_share_config = False
     try:
         import openpyxl
-        file_path = os.path.join(project_path, 'inputs', 'input_demand_file.xlsx')
+        file_path = os.path.join(project_path, DirectoryStructure.INPUTS, TemplateFiles.INPUT_DEMAND_FILE)
         if os.path.exists(file_path):
             workbook = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
             # Find 'main' sheet
@@ -329,8 +339,8 @@ def layout(active_project=None):
         dcc.Store(id='viz-td-losses', data={}),
         dcc.Store(id='viz-saved-state', data={'isSaved': False}),
         # Add sectors-store to prevent callback errors from demand_projection page
-        dcc.Store(id='sectors-store', data=[]),
-        dcc.Store(id='color-config-store', storage_type='local', data={
+        dcc.Store(id='viz-sectors-store', data=[]),
+        dcc.Store(id='viz-color-config-store', storage_type='local', data={
             # Sector colors: Dynamically generated from palette (NOT hardcoded)
             # Empty dict - will be populated dynamically based on loaded sectors
             'sectors': {},
@@ -700,9 +710,9 @@ def load_sectors(scenario, active_project):
 
 # Assign colors dynamically to sectors
 @callback(
-    Output('color-config-store', 'data', allow_duplicate=True),
+    Output('viz-color-config-store', 'data', allow_duplicate=True),
     Input('viz-sectors-list', 'data'),
-    State('color-config-store', 'data'),
+    State('viz-color-config-store', 'data'),
     prevent_initial_call=True
 )
 def assign_sector_colors(sectors, color_config):
@@ -1475,7 +1485,7 @@ def recalculate_consolidated_on_demand_type_change(state, scenario, start_year, 
     State('viz-consolidated-data', 'data'),
     State('viz-unit-selector', 'value'),
     State('viz-sectors-list', 'data'),
-    State('color-config-store', 'data'),
+    State('viz-color-config-store', 'data'),
     State('demand-viz-state', 'data'),
     prevent_initial_call=True
 )
@@ -2151,7 +2161,7 @@ def update_comparison_sector_data(active_tab, state, start_year, end_year, activ
     Input('viz-comparison-sector-data', 'data'),
     State('viz-unit-selector', 'value'),
     State('demand-viz-state', 'data'),
-    State('color-config-store', 'data'),
+    State('viz-color-config-store', 'data'),
     prevent_initial_call=True
 )
 def render_sector_line_chart_with_comparison(base_data, comparison_data, unit, state, colors):
@@ -2487,7 +2497,7 @@ def sync_consolidated_demand_type_to_state(demand_type, state):
     Input('viz-consolidated-data', 'data'),
     State('viz-unit-selector', 'value'),
     State('viz-sectors-list', 'data'),
-    State('color-config-store', 'data'),
+    State('viz-color-config-store', 'data'),
     prevent_initial_call=True
 )
 def initialize_chart_view(data, unit, sectors, colors):
